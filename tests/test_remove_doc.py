@@ -12,11 +12,13 @@ from pathlib import Path
 
 import pytest
 
+import llmwiki.remove_doc as rd
 from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.add_doc import add_sources, expected_source_page
+from llmwiki.candidates import rewrite_sources_line
 from llmwiki.candidates_harvest import harvest_targets
 from llmwiki.cli import main
-from llmwiki.dismissal_ledger import iter_dismissals
+from llmwiki.dismissal_ledger import iter_dismissals, rebuild_ledger_from_archive
 from llmwiki.lint import load_pages, run_all
 from llmwiki.remove_doc import RemoveIncompleteError, build_remove_plan, execute_remove_plan, format_plan
 from llmwiki.synth.pipeline import synthesize_new_sessions
@@ -569,3 +571,159 @@ def test_harvest_does_not_reopen_a_topic_remove_archived(tmp_path: Path) -> None
                '---\ntitle: again\ntype: source\n---\n\n## Connections\n- [[Bar]] — why\n')
 
     assert [t.name for t in harvest_targets(wiki)] == []
+
+
+# ─── local-review 2 (#277) ────────────────────────────────────────────────────
+
+REMOVE_REASON = "archived by remove: last citing source removed"
+
+
+def test_ledger_rebuild_keeps_names_remove_archived(tmp_path: Path) -> None:
+    """``migrate dismissal-ledger`` / a missing ledger must not forget a page
+    ``remove`` archived outside ``archive/candidates/`` — nor a reviewer's own
+    dismissal sitting next to it."""
+    vault, slug, state_file = _vault_with_slug(tmp_path)
+    wiki = vault / "wiki"
+    _write(vault, "concepts/Bar.md", _page(f"[{slug}]", "Only fact.\n", "Bar Concept"))
+    _write(vault, "archive/candidates/2026-01-01T00-00-00/Noise.md", '---\ntitle: "Noise"\n---\n')
+    execute_remove_plan(build_remove_plan(vault, "old-project*", state_file=state_file), state_file=state_file)
+    assert {"bar", "barconcept"} <= {r["key"] for r in iter_dismissals(wiki)}
+
+    rebuilt = rebuild_ledger_from_archive(wiki)
+
+    rows = {r["key"]: r for r in rebuilt["dismissals"]}
+    assert rows["bar"]["reason"] == REMOVE_REASON and rows["bar"]["stub"] == "../concepts/Bar.md"
+    assert rows["barconcept"]["reason"] == REMOVE_REASON
+    assert rows["noise"]["reason"] == "" and rows["noise"]["stub"] == "2026-01-01T00-00-00/Noise.md"
+    # The ledger survives being deleted: a plain read rebuilds the same rows.
+    (wiki / "archive" / "candidates" / "dismissals.json").unlink()
+    assert {r["key"] for r in iter_dismissals(wiki)} == set(rows)
+
+
+def test_ledger_rebuild_without_candidates_dir(tmp_path: Path) -> None:
+    vault, _slug, _state = _vault_with_slug(tmp_path)
+    wiki = vault / "wiki"
+    _write(vault, "archive/entities/Foo.md", _page(None, "gone\n", "Foo"))
+    assert {r["key"] for r in iter_dismissals(wiki)} == {"foo"}
+
+
+def test_corrupt_ledger_aborts_before_any_delete(tmp_path: Path, capsys) -> None:
+    vault, slug, state_file = _vault_with_slug(tmp_path)
+    raw_doc = next((vault / "raw" / "docs").rglob("*.md"))
+    page = expected_source_page(raw_doc, vault / "wiki" / "sources")
+    bar = _write(vault, "concepts/Bar.md", _page(f"[{slug}]", "Only fact.\n", "Bar"))
+    ledger = _write_ledger(vault, "{not json")
+    bar_before = bar.read_text(encoding="utf-8")
+    keys_before = _read_synth_keys(state_file)
+
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
+    with pytest.raises(RemoveIncompleteError, match="migrate dismissal-ledger"):
+        execute_remove_plan(plan, state_file=state_file)
+
+    assert raw_doc.exists() and page.exists()
+    assert bar.read_text(encoding="utf-8") == bar_before and not (vault / "wiki" / "archive" / "concepts").exists()
+    assert _read_synth_keys(state_file) == keys_before
+    assert ledger.read_text(encoding="utf-8") == "{not json"
+
+    assert main(["remove", "old-project*", "--yes", "--vault", str(vault)]) == 2
+    assert "migrate dismissal-ledger" in capsys.readouterr().err
+    assert raw_doc.exists()
+
+
+def _write_ledger(vault: Path, text: str) -> Path:
+    path = vault / "wiki" / "archive" / "candidates" / "dismissals.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_corrupt_ledger_is_ignored_when_nothing_is_archived(tmp_path: Path) -> None:
+    vault, slug, state_file = _vault_with_slug(tmp_path)
+    _write(vault, "entities/Foo.md", _page(f"[{slug}, keep-src]", "Fact.\n"))
+    _write_ledger(vault, "{not json")
+    result = execute_remove_plan(build_remove_plan(vault, "old-project*", state_file=state_file), state_file=state_file)
+    assert result["raw_docs"] == 1 and result["sources_trimmed"] == 1
+
+
+def test_unwritable_citing_page_is_reported_not_raised(tmp_path: Path, capsys, monkeypatch) -> None:
+    vault, slug, state_file = _vault_with_slug(tmp_path)
+    foo = _write(vault, "entities/Foo.md", _page(f"[{slug}, keep-src]", "Fact.\n"))
+    other = _write(vault, "entities/Other.md", _page(f"[{slug}, keep-src]", "Fact.\n"))
+    real = rd.write_page_text
+
+    def _flaky(path: Path, text: str) -> None:
+        if path == foo:
+            raise PermissionError("denied")
+        real(path, text)
+
+    monkeypatch.setattr(rd, "write_page_text", _flaky)
+    assert main(["remove", "old-project*", "--yes", "--vault", str(vault)]) == 1
+
+    assert "wiki/entities/Foo.md: denied" in capsys.readouterr().err
+    assert slug in foo.read_text(encoding="utf-8")  # untouched, reported
+    assert slug not in other.read_text(encoding="utf-8")  # the rest still cleaned
+    assert "1 page error(s)" in (vault / "wiki" / "log.md").read_text(encoding="utf-8")
+
+
+def test_frontmatter_list_items_are_not_dropped(tmp_path: Path) -> None:
+    """A ``- [[slug]]`` line inside YAML frontmatter must not lose its item
+    (that would leave a bare ``related:`` key); the body bullet still goes."""
+    vault, slug, state_file = _vault_with_slug(tmp_path)
+    foo = _write(vault, "entities/Foo.md", (
+        f'---\ntitle: "Foo"\ntype: entity\nsources: [keep-src]\nrelated:\n  - [[{slug}]]\n  - [[Other]]\n---\n\n'
+        f"## Connections\n- [[{slug}]]\n"
+    ))
+    execute_remove_plan(build_remove_plan(vault, "old-project*", state_file=state_file), state_file=state_file)
+
+    text = foo.read_text(encoding="utf-8")
+    head, _, body = text.partition("\n---\n\n")
+    assert f"  - {slug}\n  - [[Other]]" in head  # item kept, link made plain text
+    assert f"- [[{slug}]]" not in body and "## Connections" in body  # emptied section left for lint/agent
+
+
+def test_crlf_page_keeps_its_line_endings(tmp_path: Path) -> None:
+    vault, slug, state_file = _vault_with_slug(tmp_path)
+    crlf = _write(vault, "entities/Foo.md", "")
+    crlf.write_bytes((
+        f'---\r\ntitle: "Foo"\r\nsources: [{slug}, keep-src]\r\n---\r\n\r\n'
+        f"See [[{slug}]].\r\n- [[{slug}]]\r\n- [[Other]]\r\n"
+    ).encode())
+    bar = _write(vault, "concepts/Bar.md", "")
+    bar.write_bytes(f'---\r\ntitle: "Bar"\r\nsources: [{slug}]\r\n---\r\n\r\nFact.\r\n'.encode())
+    inbound = _write(vault, "entities/Inbound.md", "")
+    inbound.write_bytes(b'---\r\ntitle: "I"\r\nsources: [keep-src]\r\n---\r\n\r\nSee [[Bar]].\r\n')
+
+    execute_remove_plan(build_remove_plan(vault, "old-project*", state_file=state_file), state_file=state_file)
+
+    data = crlf.read_bytes()
+    assert b"\n" not in data.replace(b"\r\n", b"") and b"sources: [keep-src]\r\n" in data
+    assert b"- [[Other]]\r\n" in data and slug.encode() + b"." in data
+    assert inbound.read_bytes().endswith(b"See Bar.\r\n")  # inbound delink keeps CRLF too
+    assert (vault / "wiki" / "archive" / "concepts" / "Bar.md").read_bytes().count(b"\r\n") == 5
+
+
+def test_block_style_sources_are_trimmed_and_archived(tmp_path: Path) -> None:
+    vault, slug, state_file = _vault_with_slug(tmp_path)
+    blk = _write(vault, "entities/Blk.md", (
+        f'---\ntitle: "Blk"\nsources:\n  - {slug}\n  - "keep-src"\nlast_updated: 2026-01-01\n---\n\n- [[{slug}]]\nBody.\n'
+    ))
+    solo = _write(vault, "concepts/Solo.md", f'---\ntitle: "Solo"\nsources:\n  - {slug}\n---\n\nFact.\n')
+
+    plan = build_remove_plan(vault, "old-project*", state_file=state_file)
+    assert [e.rel.as_posix() for e in plan.pages_to_archive] == ["concepts/Solo.md"]
+    execute_remove_plan(plan, state_file=state_file)
+
+    assert blk.read_text(encoding="utf-8") == (
+        '---\ntitle: "Blk"\nsources:\n  - "keep-src"\nlast_updated: 2026-01-01\n---\n\nBody.\n'
+    )
+    assert not solo.exists() and (vault / "wiki" / "archive" / "concepts" / "Solo.md").is_file()
+
+
+def test_rewrite_sources_line_block_and_inline_forms() -> None:
+    block = '---\r\nsources:\r\n  - a\r\n  - B\r\ntitle: t\r\n---\r\nbody\r\n'
+    assert rewrite_sources_line(block, {"b"}) == '---\r\nsources:\r\n  - a\r\ntitle: t\r\n---\r\nbody\r\n'
+    assert rewrite_sources_line(block, {"a", "b"}) == '---\r\ntitle: t\r\n---\r\nbody\r\n'
+    assert rewrite_sources_line(block, {"zzz"}) == block
+    assert rewrite_sources_line("---\nsources: [a, b]\n---\n", {"a"}) == "---\nsources: [b]\n---\n"
+    # ``sources:`` outside a closed frontmatter block is body text.
+    assert rewrite_sources_line("---\nsources: [a]\n", {"a"}) == "---\nsources: [a]\n"

@@ -898,9 +898,9 @@ def test_apply_scans_the_wiki_once_for_a_batch_of_discards(
     walks: list[Path] = []
     real_walk = candidates_mod._iter_live_markdown  # noqa: SLF001
 
-    def _counted(wiki_dir: Path) -> list[Path]:
+    def _counted(wiki_dir: Path, **kwargs) -> list[Path]:
         walks.append(wiki_dir)
-        return real_walk(wiki_dir)
+        return real_walk(wiki_dir, **kwargs)
 
     monkeypatch.setattr(candidates_mod, "_iter_live_markdown", _counted)
 

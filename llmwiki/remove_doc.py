@@ -28,6 +28,18 @@ kept as an unsourced claim, and its name is recorded in the dismissal ledger
 (``wiki/archive/candidates/dismissals.json``) so harvest never re-proposes it.
 Nothing is annotated: the citation is trimmed, not flagged. The append-only
 ``wiki/log.md`` and its yearly archives are never rewritten, by either pass.
+
+Page text is edited in place: line endings (CRLF) are preserved, list-item
+dropping only looks at the body (never YAML frontmatter), and ``sources:`` is
+trimmed in inline (``[a, b]``) and block (``- a``) form alike. A
+``## Connections`` section whose only bullets were dropped is left empty for
+``lint`` or the agent to refill.
+
+The dismissal ledger is checked BEFORE the first deletion whenever a page is
+due for archiving, so a corrupt ``dismissals.json`` aborts with
+:class:`RemoveIncompleteError` instead of stranding a half-cleaned vault. A
+page that cannot be edited or archived afterwards is reported
+(:attr:`RemovePlan.page_errors`) while the rest of the cleanup still runs.
 """
 
 from __future__ import annotations
@@ -36,15 +48,33 @@ import fnmatch
 import os
 import re
 import shutil
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 from llmwiki._frontmatter import parse_frontmatter
-from llmwiki._system_pages import ARCHIVE_FOLDER, is_archived_path, is_system_file
+from llmwiki._system_pages import ARCHIVE_FOLDER, is_system_file
 from llmwiki.add_doc import remove_raw_docs
-from llmwiki.candidates import parse_sources_field, rewrite_sources_line
-from llmwiki.dismissal_ledger import archive_candidates_dir, ledger_path, load_ledger, save_ledger, upsert_dismissal
+from llmwiki.candidates import (
+    _iter_live_markdown,
+    _live_page_keys,
+    frontmatter_sources,
+    page_names,
+    read_page_text,
+    rewrite_links_in_wiki,
+    rewrite_sources_line,
+    write_page_text,
+)
+from llmwiki.dismissal_ledger import (
+    LEDGER_FILENAME,
+    REMOVE_DISMISSAL_REASON,
+    archive_candidates_dir,
+    ledger_path,
+    load_ledger,
+    save_ledger,
+    upsert_dismissal,
+)
 from llmwiki.state_store import read_state, update_state
 from llmwiki.synth.pipeline import (
     _append_log,
@@ -53,7 +83,7 @@ from llmwiki.synth.pipeline import (
     source_page_paths,
     synth_page_filename,
 )
-from llmwiki.wikilinks import norm_page_key, parse_page_aliases, rewrite_wikilinks, strip_anchor
+from llmwiki.wikilinks import norm_page_key, rewrite_wikilinks, strip_anchor
 
 __all__ = [
     "PageEdit",
@@ -77,8 +107,8 @@ _CODE_FENCE_RE = re.compile(r"^[ \t]*(?:```|~~~)")
 
 
 class RemoveIncompleteError(RuntimeError):
-    """A raw doc could not be unlinked, so the cascade stopped before
-    touching anything derived from it."""
+    """The cascade stopped before touching anything: a raw doc could not be
+    unlinked, or the dismissal ledger a page archive needs is unreadable."""
 
 
 @dataclass
@@ -95,6 +125,8 @@ class PageEdit:
     items_dropped: int = 0
     #: True when the page had ``sources:`` and has none left.
     sources_emptied: bool = False
+    #: True once the page has actually moved to ``wiki/archive/`` (execute only).
+    archived: bool = False
 
     @property
     def archive(self) -> bool:
@@ -120,6 +152,9 @@ class RemovePlan:
     delink_keys: list[str] = field(default_factory=list)
     #: Live pages (outside ``wiki/archive/``) that cite a removed slug.
     citing_pages: list[PageEdit] = field(default_factory=list)
+    #: ``wiki/<page>: <error>`` for each page the cleanup could not read, edit
+    #: or archive. Filled by :func:`execute_remove_plan`.
+    page_errors: list[str] = field(default_factory=list)
 
     @property
     def is_empty(self) -> bool:
@@ -144,6 +179,17 @@ def _archivable(rel: Path) -> bool:
         and not rel.name.startswith("_")
         and not is_system_file(rel.name)
     )
+
+
+def _split_frontmatter(text: str) -> tuple[str, str]:
+    """``(frontmatter with its fences, body)``; ``("", text)`` without a closed block."""
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip().lstrip("\ufeff") != "---":
+        return "", text
+    for i in range(1, len(lines)):
+        if lines[i].rstrip() == "---":
+            return "".join(lines[: i + 1]), "".join(lines[i + 1 :])
+    return "", text
 
 
 def _drop_link_only_items(text: str, keys: set[str]) -> tuple[str, int]:
@@ -179,18 +225,21 @@ def _edit_page(
     """Apply the removal to one page's text; returns the new text + a tally.
 
     The single code path behind both the dry-run preview and the real run, so
-    what is reported is what is written.
+    what is reported is what is written. List items are dropped from the body
+    only — dropping one inside YAML frontmatter would leave a bare key — while
+    plain-text unlinking covers the whole page.
     """
     edit = PageEdit(path=path, rel=rel)
     new_text = text
     if link_keys:
-        new_text, edit.items_dropped = _drop_link_only_items(new_text, link_keys)
-        new_text, counts = rewrite_wikilinks(new_text, dict.fromkeys(link_keys))
+        head, body = _split_frontmatter(new_text)
+        body, edit.items_dropped = _drop_link_only_items(body, link_keys)
+        new_text, counts = rewrite_wikilinks(head + body, dict.fromkeys(link_keys))
         edit.links_unlinked = sum(counts.values())
-    before = parse_sources_field(parse_frontmatter(new_text)[0].get("sources"))
+    before = frontmatter_sources(new_text)
     if before and slugs:
         new_text = rewrite_sources_line(new_text, slugs)
-        after = parse_sources_field(parse_frontmatter(new_text)[0].get("sources"))
+        after = frontmatter_sources(new_text)
         edit.sources_trimmed = len(before) - len(after)
         edit.sources_emptied = not after
     return new_text, edit
@@ -282,27 +331,21 @@ def _scan_by_source_file(wiki_sources: Path, keys: set[str]) -> list[Path]:
     return found
 
 
-def _live_pages(wiki_dir: Path, skip: set[Path]) -> list[tuple[Path, str]]:
-    """``(path, text)`` of every readable page outside ``wiki/archive/``.
+def _skipping(planned: Collection[Path] = ()) -> Callable[[Path], bool]:
+    """Walk filter for :func:`_iter_live_markdown`: the append-only log and its
+    yearly archives (history is never rewritten) and ``planned`` pages (about
+    to be deleted)."""
+    return lambda path: path in planned or is_log_page(path.name)
 
-    ``skip`` holds pages about to be deleted. The append-only log and its
-    yearly archives are skipped too: history is never rewritten.
-    """
-    pages: list[tuple[Path, str]] = []
-    if not wiki_dir.is_dir():
-        return pages
-    for path in sorted(wiki_dir.rglob("*.md")):
-        if (
-            not path.is_file()
-            or path in skip
-            or is_archived_path(path.relative_to(wiki_dir).parts)
-            or is_log_page(path.name)
-        ):
-            continue
+
+def _read_live_pages(wiki_dir: Path, exclude: Callable[[Path], bool]) -> list[tuple[Path, str | None]]:
+    """``(path, text)`` of every live page; ``text`` is ``None`` when unreadable."""
+    pages: list[tuple[Path, str | None]] = []
+    for path in _iter_live_markdown(wiki_dir, exclude=exclude):
         try:
-            pages.append((path, path.read_text(encoding="utf-8")))
+            pages.append((path, read_page_text(path)))
         except (OSError, UnicodeDecodeError):
-            continue
+            pages.append((path, None))
     return pages
 
 
@@ -327,15 +370,14 @@ def _scan_citing_pages(
     if not slugs:
         return [], [], []
 
-    pages = _live_pages(wiki_dir, planned)
-    owned: set[str] = set()
-    for path, text in pages:
-        owned.add(norm_page_key(path.stem))
-        owned.update(norm_page_key(a) for a in parse_page_aliases(text))
+    pages = _read_live_pages(wiki_dir, _skipping(planned))
+    owned = {norm_page_key(name) for path, text in pages for name in page_names(path, text)}
     keys = sorted({norm_page_key(s) for s in slugs} - owned - {""})
 
     citing: list[PageEdit] = []
     for path, text in pages:
+        if text is None:
+            continue
         rel = path.relative_to(wiki_dir)
         _new, edit = _edit_page(path, rel, text, set(slugs), set(keys))
         if _changed(edit):
@@ -450,19 +492,20 @@ def _describe(edit: PageEdit) -> str:
     return ", ".join(bits)
 
 
-def _summarize_edits(edits: list[PageEdit]) -> str:
-    """One-line tally of ``edits`` for the CLI summary and the log entry."""
-    return (
+def _summarize_edits(edits: list[PageEdit], errors: list[str]) -> str:
+    """One-line tally of ``edits`` for the log entry."""
+    line = (
         f"{len(edits)} citing page(s): "
         f"{sum(e.sources_trimmed for e in edits)} source(s) trimmed, "
         f"{sum(e.links_unlinked for e in edits)} link(s) unlinked, "
         f"{sum(e.items_dropped for e in edits)} list item(s) dropped, "
-        f"{sum(1 for e in edits if e.archive)} page(s) archived"
+        f"{sum(1 for e in edits if e.archived)} page(s) archived"
     )
+    return line + (f", {len(errors)} page error(s)" if errors else "")
 
 
-def _archive_page(page: Path, wiki_dir: Path) -> Path:
-    """Move ``page`` to ``wiki/archive/<same relative path>``.
+def _archive_destination(page: Path, wiki_dir: Path) -> Path:
+    """Where ``page`` moves: ``wiki/archive/<same relative path>``.
 
     On a name collision the page lands under a UTC-timestamp folder instead
     (``wiki/archive/<stamp>/<relative path>``), so nothing already archived is
@@ -477,82 +520,126 @@ def _archive_page(page: Path, wiki_dir: Path) -> Path:
         while dest.exists():
             n += 1
             dest = wiki_dir / ARCHIVE_FOLDER / f"{stamp}-{n}" / rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(page), str(dest))
     return dest
 
 
-#: Ledger reason for a page ``remove`` archived because its last source went.
-_DISMISSAL_REASON = "archived by remove: last citing source removed"
-
-
 def _record_dismissal(original: Path, dest: Path, wiki_dir: Path) -> None:
-    """Settle the archived page's name(s) in the dismissal ledger (#277).
+    """Settle the page's name(s) in the dismissal ledger (#277).
 
     One row per distinct ``norm_page_key`` of the filename stem and the
-    frontmatter ``title``. ``stub`` follows the ledger's convention — the
-    archived file relative to ``wiki/archive/candidates/`` — so a candidate
-    that lands there is a bare ``<name>.md`` and any other archived page reads
-    ``../<folder>/<name>.md`` (or ``../<stamp>/…`` after a collision).
+    frontmatter ``title`` (read from ``original``, which has not moved yet).
+    ``stub`` follows the ledger's convention — the archived file relative to
+    ``wiki/archive/candidates/`` — so a candidate that lands there is a bare
+    ``<name>.md`` and any other archived page reads ``../<folder>/<name>.md``
+    (or ``../<stamp>/…`` after a collision). The same rows are what
+    :func:`llmwiki.dismissal_ledger.build_ledger_from_archive` re-derives.
     """
     stub = Path(os.path.relpath(dest, archive_candidates_dir(wiki_dir))).as_posix()
     names = [original.stem]
     try:
-        title = parse_frontmatter(dest.read_text(encoding="utf-8"))[0].get("title")
+        title = parse_frontmatter(read_page_text(original))[0].get("title")
     except (OSError, UnicodeDecodeError):
         title = None
     if title and norm_page_key(str(title)) != norm_page_key(original.stem):
         names.append(str(title))
     for name in names:
         if norm_page_key(name):
-            upsert_dismissal(wiki_dir, name=name, stub=stub, reason=_DISMISSAL_REASON)
+            upsert_dismissal(wiki_dir, name=name, stub=stub, reason=REMOVE_DISMISSAL_REASON)
+
+
+def _preflight_ledger(plan: RemovePlan) -> None:
+    """Make sure the dismissal ledger can be updated, before anything is deleted.
+
+    Needed only when a page is due for archiving. Loads the ledger (so a
+    corrupt file fails here, not after the raw docs are gone) and materialises
+    it, so the first upsert is an incremental update rather than a rebuild
+    from the archive.
+    """
+    if not plan.pages_to_archive:
+        return
+    wiki_dir = plan.vault_root / "wiki"
+    try:
+        ledger = load_ledger(wiki_dir)
+        if not ledger_path(wiki_dir).is_file():
+            save_ledger(wiki_dir, ledger)
+    except (OSError, ValueError) as exc:
+        raise RemoveIncompleteError(
+            f"remove.dismissals_unreadable: {LEDGER_FILENAME} is unreadable "
+            f"({exc}); run `llmwiki migrate dismissal-ledger` to rebuild it, "
+            "then re-run remove — nothing was removed"
+        ) from exc
+
+
+def _page_error(wiki_dir: Path, path: Path, exc: Exception) -> str:
+    try:
+        rel = path.relative_to(wiki_dir).as_posix()
+    except ValueError:
+        rel = str(path)
+    return f"wiki/{rel}: {exc}"
 
 
 def _apply_page_edits(plan: RemovePlan) -> tuple[list[PageEdit], int]:
     """Rewrite every citing page, archive the ones left unsourced, and unlink
     inbound links to what was archived. Returns the edits actually made and the
-    inbound links unlinked."""
+    inbound links unlinked; pages that could not be read, written or archived
+    go to ``plan.page_errors`` while the rest carry on."""
     wiki_dir = plan.vault_root / "wiki"
     slugs, keys = set(plan.removed_slugs), set(plan.delink_keys)
+    errors = plan.page_errors
     done: list[PageEdit] = []
     for planned in plan.citing_pages:
         try:
-            text = planned.path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            text = read_page_text(planned.path)
+        except (OSError, UnicodeDecodeError) as exc:
+            errors.append(_page_error(wiki_dir, planned.path, exc))
             continue
         new_text, edit = _edit_page(planned.path, planned.rel, text, slugs, keys)
         if not _changed(edit):
             continue
-        planned.path.write_text(new_text, encoding="utf-8")
+        try:
+            write_page_text(planned.path, new_text)
+        except OSError as exc:
+            errors.append(_page_error(wiki_dir, planned.path, exc))
+            continue
         done.append(edit)
 
-    archived = [e for e in done if e.archive]
-    if archived:
-        # Materialise the ledger before anything moves, so the first upsert is
-        # an incremental update rather than a rebuild from the archive.
-        if not ledger_path(wiki_dir).is_file():
-            save_ledger(wiki_dir, load_ledger(wiki_dir))
-    for edit in archived:
-        dest = _archive_page(edit.path, wiki_dir)
-        _record_dismissal(edit.path, dest, wiki_dir)
+    for edit in done:
+        if not edit.archive:
+            continue
+        # Settle the name BEFORE the page moves: a page left in place with a
+        # spare ledger row is harmless, an archived page whose name was never
+        # recorded would be proposed as a candidate again.
+        try:
+            dest = _archive_destination(edit.path, wiki_dir)
+            _record_dismissal(edit.path, dest, wiki_dir)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(edit.path), str(dest))
+        except (OSError, ValueError) as exc:
+            errors.append(_page_error(wiki_dir, edit.path, exc))
+            continue
+        edit.archived = True
+
     inbound = 0
+    archived = [e for e in done if e.archived]
     if archived:
         # A name another live page still answers to keeps its links. The same
-        # page set (no archive/, no log pages) drives both the ownership check
+        # page walk (no archive/, no log pages) drives both the ownership check
         # and the rewrite, so append-only history is never touched.
-        live = _live_pages(wiki_dir, set())
-        owned: set[str] = set()
-        for path, text in live:
-            owned.add(norm_page_key(path.stem))
-            owned.update(norm_page_key(a) for a in parse_page_aliases(text))
-        gone = {norm_page_key(e.path.stem) for e in archived} - owned - {""}
+        skip_log = _skipping()
+        gone = (
+            {norm_page_key(e.path.stem) for e in archived}
+            - _live_page_keys(wiki_dir, errors=errors, exclude=skip_log)
+            - {""}
+        )
         if gone:
-            targets = dict.fromkeys(gone)
-            for path, text in live:
-                new_text, counts = rewrite_wikilinks(text, targets, self_stem=path.stem)
-                if counts and new_text != text:
-                    path.write_text(new_text, encoding="utf-8")
-                    inbound += sum(counts.values())
+            try:
+                rewrite = rewrite_links_in_wiki(
+                    wiki_dir, dict.fromkeys(gone), errors=errors, exclude=skip_log,
+                )
+            except OSError as exc:
+                errors.append(f"inbound link cleanup: {exc}")
+            else:
+                inbound = sum(rewrite.counts.values())
     return done, inbound
 
 
@@ -568,9 +655,12 @@ def execute_remove_plan(
     logs nothing.
 
     Raises :class:`RemoveIncompleteError` when a raw doc could not be
-    unlinked, BEFORE any derived page or state key is touched — a vault
-    left holding the raw file but missing its page and state entry is
-    worse than one that was never touched."""
+    unlinked, or when the dismissal ledger needed to archive a page is
+    unreadable — either way BEFORE any derived page or state key is touched:
+    a vault left holding the raw file but missing its page and state entry is
+    worse than one that was never touched. Pages the cleanup could not edit or
+    archive afterwards are listed in ``plan.page_errors`` (and counted in
+    ``result["page_errors"]``) rather than aborting the rest."""
 
     result = {
         "raw_docs": 0,
@@ -582,10 +672,12 @@ def execute_remove_plan(
         "links_unlinked": 0,
         "list_items_dropped": 0,
         "pages_archived": 0,
+        "page_errors": 0,
     }
     if plan.is_empty:
         return result
 
+    _preflight_ledger(plan)
     removed_raw = remove_raw_docs(plan.raw_docs)
     if len(removed_raw) != len(plan.raw_docs):
         stuck = [str(p) for p in plan.raw_docs if p.exists()]
@@ -629,7 +721,8 @@ def execute_remove_plan(
     result["sources_trimmed"] = sum(e.sources_trimmed for e in edits)
     result["links_unlinked"] = sum(e.links_unlinked for e in edits) + inbound
     result["list_items_dropped"] = sum(e.items_dropped for e in edits)
-    result["pages_archived"] = sum(1 for e in edits if e.archive)
+    result["pages_archived"] = sum(1 for e in edits if e.archived)
+    result["page_errors"] = len(plan.page_errors)
 
     # No backlink pruning here: `backlinks.prune_all` strips the block from
     # EVERY page in the wiki, and nothing regenerates them (`inject_all` has
@@ -641,6 +734,6 @@ def execute_remove_plan(
         f"{result['raw_docs']} docs ({plan.selector})",
         log_path=wiki_dir / "log.md",
         operation="remove",
-        details={"processed": _summarize_edits(edits)} if edits else None,
+        details={"processed": _summarize_edits(edits, plan.page_errors)} if edits or plan.page_errors else None,
     )
     return result

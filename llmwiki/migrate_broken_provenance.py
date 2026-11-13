@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki._frontmatter import parse_frontmatter
-from llmwiki.candidates import parse_sources_field, rewrite_sources_line
+from llmwiki.candidates import frontmatter_sources, rewrite_sources_line
 
 _CONTEXT_FILE = "_context.md"
 _FENCE = re.compile(r"^---[ \t]*$")
@@ -362,11 +362,11 @@ def run_migration(*, vault: Path, dry_run: bool = False) -> dict[str, Any]:
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            before = parse_sources_field(parse_frontmatter(text)[0].get("sources"))
+            before = frontmatter_sources(text)
             if not before:
                 continue
             new_text = rewrite_sources_line(text, drop_aliases)
-            after = parse_sources_field(parse_frontmatter(new_text)[0].get("sources"))
+            after = frontmatter_sources(new_text)
             dropped = len(before) - len(after)
             if dropped <= 0 or new_text == text:
                 continue

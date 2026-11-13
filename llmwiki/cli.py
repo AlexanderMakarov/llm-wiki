@@ -1855,7 +1855,7 @@ _MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "dismissal-ledger",
-        "Rebuild wiki/archive/candidates/dismissals.json from archived candidate stubs and any legacy sibling *.reason.txt files (pure dismissals and merge intents).",
+        "Rebuild wiki/archive/candidates/dismissals.json from archived candidate stubs, pages `llmwiki remove` archived elsewhere under wiki/archive/, and any legacy sibling *.reason.txt files (pure dismissals and merge intents).",
         "Run once after upgrading to the dismissals.json ledger when the vault still has older reason files, or when dismissals.json is missing/out of date versus the archive. Ordinary ledger reads also auto-rebuild when the file is missing; this migrate is the explicit --dry-run path. Offline — no LLM call, and raw/ is never written. Safe to re-run.",
     ),
     (
@@ -2718,6 +2718,12 @@ def cmd_remove(args: argparse.Namespace) -> int:
               f"{result['links_unlinked']} link(s) unlinked, "
               f"{result['list_items_dropped']} list item(s) dropped, "
               f"{result['pages_archived']} page(s) archived")
+    if plan.page_errors:
+        print(f"error: {len(plan.page_errors)} page(s) could not be fully cleaned "
+              "(the rest of the cascade completed):", file=sys.stderr)
+        for line in plan.page_errors[:10]:
+            print(f"  ! {line}", file=sys.stderr)
+        return 1
     return 0
 
 

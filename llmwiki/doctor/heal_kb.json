@@ -301,6 +301,22 @@
       "runner": null
     },
     {
+      "id": "remove.dismissals_unreadable",
+      "area": "K",
+      "patterns": [
+        "remove.dismissals_unreadable",
+        "dismissals.json is unreadable",
+        "re:migrate dismissal-ledger.*re-run remove",
+        "nothing was removed"
+      ],
+      "message": "llmwiki remove could not read wiki/archive/candidates/dismissals.json, so it aborted before deleting anything.",
+      "fix": "Rebuild the ledger with llmwiki migrate dismissal-ledger --vault <vault> (prefer --dry-run first), then re-run remove.",
+      "actionable": true,
+      "severity": "error",
+      "tier": "dangerous",
+      "runner": "migrate:dismissal-ledger"
+    },
+    {
       "id": "migrate.session_tokens.unknown_adapter",
       "area": "K",
       "patterns": [

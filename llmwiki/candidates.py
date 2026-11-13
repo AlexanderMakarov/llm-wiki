@@ -55,13 +55,12 @@ from __future__ import annotations
 import re
 import shutil
 from collections import defaultdict
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
-from llmwiki._frontmatter import parse_frontmatter
 from llmwiki._system_pages import ARCHIVE_FOLDER, is_archived_path
 from llmwiki.candidates_near_match import PriorDismissal, attach_prior_dismissals
 from llmwiki.dismissal_ledger import (
@@ -368,45 +367,95 @@ _parse_sources_field = parse_sources_field
 
 _SOURCES_LINE_RE = re.compile(r"^sources:[ \t]*.*$")
 _FRONTMATTER_FENCE_RE = re.compile(r"^---[ \t]*$")
+#: One ``- slug`` continuation line of a block-style ``sources:`` list.
+_BLOCK_ITEM_RE = re.compile(r"^[ \t]*-[ \t]+(.*?)[ \t]*$")
+
+
+def _clean_source_item(raw: str) -> str:
+    return raw.strip().strip('"').strip("'")
+
+
+def _locate_sources(lines: list[str]) -> tuple[int, int, list[str], bool] | None:
+    """Find the frontmatter ``sources:`` key in ``lines`` (``keepends`` lines).
+
+    Returns ``(start, end, items, block)``: the key's line, the index one past
+    its last line, the entries, and whether they are a block list (``- slug``
+    lines under a bare ``sources:``) rather than an inline value. ``None``
+    when there is no frontmatter or no ``sources:`` key in it.
+    """
+    if not lines or lines[0].rstrip("\r\n").lstrip("\ufeff") != "---":
+        return None
+    close = next(
+        (i for i in range(1, len(lines)) if _FRONTMATTER_FENCE_RE.match(lines[i].rstrip("\r\n"))),
+        None,
+    )
+    if close is None:
+        return None  # unterminated: not frontmatter, so no ``sources:`` key
+    for i in range(1, close):
+        stripped = lines[i].rstrip("\r\n")
+        if not _SOURCES_LINE_RE.match(stripped):
+            continue
+        value = stripped[len("sources:") :].strip()
+        if value:
+            return i, i + 1, parse_sources_field(value), False
+        end = i + 1
+        items: list[str] = []
+        while end < close:
+            m = _BLOCK_ITEM_RE.match(lines[end].rstrip("\r\n"))
+            if not m:
+                break
+            if item := _clean_source_item(m.group(1)):
+                items.append(item)
+            end += 1
+        return i, end, items, True
+    return None
+
+
+def frontmatter_sources(text: str) -> list[str]:
+    """The frontmatter ``sources:`` entries of ``text``, inline or block style.
+
+    :func:`llmwiki._frontmatter.parse_frontmatter` only reads the inline form
+    (``sources: [a, b]``); this also reads ``sources:`` followed by ``- a`` /
+    ``- b`` lines, so callers that trim entries see both spellings.
+    """
+    located = _locate_sources(text.splitlines(keepends=True))
+    return located[2] if located else []
 
 
 def rewrite_sources_line(text: str, drop: set[str]) -> str:
     """Remove ``drop`` (case-insensitive) from the frontmatter ``sources:`` list.
 
-    Rewrites a one-line ``sources:`` as the inline form ``[a, b]``; when
-    nothing is left the whole line is removed, so a page never keeps an empty
-    ``sources:`` key. Line endings and every other line are preserved, and
-    text without a matching entry comes back unchanged. Shared by
+    An inline ``sources:`` is rewritten as ``[a, b]``; in a block list only the
+    dropped ``- slug`` lines go and the survivors keep their own lines. When
+    nothing is left the whole key is removed, so a page never keeps an empty
+    ``sources:``. Line endings and every other line are preserved, and text
+    without a matching entry comes back unchanged. Shared by
     ``migrate broken-provenance`` and ``remove`` (#277).
     """
     if not drop:
         return text
     drop_cf = {d.casefold() for d in drop}
-    meta, _body = parse_frontmatter(text)
-    existing = parse_sources_field(meta.get("sources"))
-    if not existing:
+    lines = text.splitlines(keepends=True)
+    located = _locate_sources(lines)
+    if located is None:
         return text
+    start, end, existing, block = located
     kept = [s for s in existing if s.casefold() not in drop_cf]
-    if kept == existing:
+    if not existing or kept == existing:
         return text
 
-    lines = text.splitlines(keepends=True)
-    if not lines or lines[0].rstrip("\r\n") != "---":
-        return text
-    out: list[str] = [lines[0]]
-    for i, line in enumerate(lines[1:], start=1):
-        stripped = line.rstrip("\r\n")
-        ending = line[len(stripped) :]
-        if _FRONTMATTER_FENCE_RE.match(stripped):
-            out.extend(lines[i:])
-            return "".join(out)
-        if _SOURCES_LINE_RE.match(stripped):
-            if not kept:
-                continue  # remove empty sources:
-            out.append(f"sources: [{', '.join(kept)}]{ending}")
-            continue
-        out.append(line)
-    return text
+    if not kept:
+        replacement: list[str] = []
+    elif block:
+        replacement = [lines[start]] + [
+            line for line in lines[start + 1 : end]
+            if _clean_source_item(_BLOCK_ITEM_RE.match(line.rstrip("\r\n")).group(1)).casefold()
+            not in drop_cf
+        ]
+    else:
+        ending = lines[start][len(lines[start].rstrip("\r\n")) :]
+        replacement = [f"sources: [{', '.join(kept)}]{ending}"]
+    return "".join(lines[:start] + replacement + lines[end:])
 
 
 def _section_span(body: str, heading: str) -> tuple[int, int] | None:
@@ -1268,14 +1317,35 @@ def discard(
     return result
 
 
-def _iter_live_markdown(wiki_dir: Path) -> list[Path]:
-    """Every ``*.md`` under ``wiki/`` outside cold storage, sorted."""
+def _iter_live_markdown(
+    wiki_dir: Path, *, exclude: Callable[[Path], bool] | None = None,
+) -> list[Path]:
+    """Every ``*.md`` under ``wiki/`` outside cold storage, sorted.
+
+    ``exclude`` drops further pages from the walk, so a caller that must leave
+    some pages alone (``remove`` skips the append-only log and the source
+    pages it is deleting) shares this one definition of "live" instead of
+    keeping a copy.
+    """
     if not wiki_dir.is_dir():
         return []
     return [
         path for path in sorted(wiki_dir.rglob("*.md"))
-        if path.is_file() and not is_archived_path(path.relative_to(wiki_dir).parts)
+        if path.is_file()
+        and not is_archived_path(path.relative_to(wiki_dir).parts)
+        and not (exclude is not None and exclude(path))
     ]
+
+
+def read_page_text(path: Path) -> str:
+    """Read a page without translating line endings (CRLF stays CRLF)."""
+    return path.read_bytes().decode("utf-8")
+
+
+def write_page_text(path: Path, text: str) -> None:
+    """Write a page without translating line endings (the inverse of
+    :func:`read_page_text`)."""
+    path.write_bytes(text.encode("utf-8"))
 
 
 def _note_skip(
@@ -1296,25 +1366,38 @@ def _note_skip(
         errors.append(entry)
 
 
+def page_names(path: Path, text: str | None) -> list[str]:
+    """Every name a page answers to: its stem, then its ``## Aliases``.
+
+    ``text`` is ``None`` for a page that could not be read — it still owns
+    its stem. The one definition of page identity shared by
+    :func:`_live_page_owners` and ``remove``.
+    """
+    return [path.stem] + (parse_page_aliases(text) if text is not None else [])
+
+
 def _live_page_owners(
-    wiki_dir: Path, *, errors: list[str] | None = None,
+    wiki_dir: Path,
+    *,
+    errors: list[str] | None = None,
+    exclude: Callable[[Path], bool] | None = None,
 ) -> dict[str, list[Path]]:
     """``norm_page_key`` → the live pages answering to it: stems + aliases.
 
     Pending candidates count — their names are still under review. A page
     that cannot be read still owns its stem; only its aliases are lost, and
-    the failure is appended to ``errors``.
+    the failure is appended to ``errors``. ``exclude`` is passed to
+    :func:`_iter_live_markdown`.
     """
     owners: dict[str, list[Path]] = defaultdict(list)
-    for path in _iter_live_markdown(wiki_dir):
-        names = [path.stem]
+    for path in _iter_live_markdown(wiki_dir, exclude=exclude):
+        text: str | None
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             _note_skip(errors, wiki_dir, path, exc)
-        else:
-            names.extend(parse_page_aliases(text))
-        for name in names:
+            text = None
+        for name in page_names(path, text):
             key = norm_page_key(name)
             if key and path not in owners[key]:
                 owners[key].append(path)
@@ -1322,9 +1405,14 @@ def _live_page_owners(
     return dict(owners)
 
 
-def _live_page_keys(wiki_dir: Path, *, errors: list[str] | None = None) -> set[str]:
+def _live_page_keys(
+    wiki_dir: Path,
+    *,
+    errors: list[str] | None = None,
+    exclude: Callable[[Path], bool] | None = None,
+) -> set[str]:
     """``norm_page_key`` of every name a live page answers to: stems + aliases."""
-    return set(_live_page_owners(wiki_dir, errors=errors))
+    return set(_live_page_owners(wiki_dir, errors=errors, exclude=exclude))
 
 
 def archived_candidate_names(
@@ -1421,6 +1509,7 @@ def rewrite_links_in_wiki(
     *,
     dry_run: bool = False,
     errors: list[str] | None = None,
+    exclude: Callable[[Path], bool] | None = None,
 ) -> LinkRewrite:
     """Apply :func:`llmwiki.wikilinks.rewrite_wikilinks` to every live page.
 
@@ -1429,16 +1518,17 @@ def rewrite_links_in_wiki(
     page is rewritten as itself, so a link retargeted at the page it already
     sits on becomes plain text instead of a self-link. ``dry_run`` counts
     without writing, and a page that cannot be read is appended to ``errors``
-    rather than skipped without a word.
+    rather than skipped without a word. Line endings are preserved, and
+    ``exclude`` drops pages from the walk (see :func:`_iter_live_markdown`).
     """
     totals: dict[str, int] = defaultdict(int)
     changed: list[str] = []
     by_key: dict[str, list[str]] = defaultdict(list)
     if not targets:
         return LinkRewrite(counts={}, pages=changed, pages_by_key={})
-    for path in _iter_live_markdown(wiki_dir):
+    for path in _iter_live_markdown(wiki_dir, exclude=exclude):
         try:
-            text = path.read_text(encoding="utf-8")
+            text = read_page_text(path)
         except (OSError, UnicodeDecodeError) as exc:
             _note_skip(errors, wiki_dir, path, exc)
             continue
@@ -1446,7 +1536,7 @@ def rewrite_links_in_wiki(
         if not counts or new_text == text:
             continue
         if not dry_run:
-            path.write_text(new_text, encoding="utf-8")
+            write_page_text(path, new_text)
         rel = path.relative_to(wiki_dir).as_posix()
         for key, n in counts.items():
             totals[key] += n
