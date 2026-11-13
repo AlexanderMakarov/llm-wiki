@@ -2,8 +2,10 @@
 
 Offline one-time import for vaults that still carry legacy sibling
 ``*.reason.txt`` files (or archived stubs with no ledger yet). Scans
-``wiki/archive/candidates/`` the same way :func:`llmwiki.dismissal_ledger.rebuild_ledger_from_archive`
-does, then writes ``dismissals.json``.
+``wiki/archive/candidates/`` and the rest of ``wiki/archive/`` (pages
+``llmwiki remove`` archived, #277) the same way
+:func:`llmwiki.dismissal_ledger.rebuild_ledger_from_archive` does, then writes
+``dismissals.json``.
 
 When the ledger file is missing and the archive exists, ordinary ledger
 reads (:func:`llmwiki.dismissal_ledger.load_ledger`) auto-rebuild; this migrate

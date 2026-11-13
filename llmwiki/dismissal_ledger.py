@@ -4,10 +4,12 @@ Versioned ledger for discarded-candidate decisions (pure dismissals and
 merge intents). Other modules must not open, parse, or write that path —
 call the helpers here instead.
 
-When :func:`load_ledger` finds no ledger file but ``wiki/archive/candidates/``
-exists, it auto-rebuilds from archived stubs and any legacy sibling
-``*.reason.txt`` files (FR6), then persists the result. With no archive a read
-returns an empty ledger and writes nothing. Corrupt JSON fails loud; use
+When :func:`load_ledger` finds no ledger file but ``wiki/archive/`` exists, it
+auto-rebuilds from archived stubs and any legacy sibling ``*.reason.txt``
+files (FR6), then persists the result. The rebuild also keeps the names of
+pages ``llmwiki remove`` archived outside ``archive/candidates/`` (#277), under
+:data:`REMOVE_DISMISSAL_REASON`. With no archive a read returns an empty
+ledger and writes nothing. Corrupt JSON fails loud; use
 :func:`rebuild_ledger_from_archive` or ``llmwiki migrate dismissal-ledger``
 to repair / re-import.
 """
@@ -29,6 +31,11 @@ from llmwiki.wikilinks import norm_page_key
 LEDGER_VERSION = 1
 LEDGER_FILENAME = "dismissals.json"
 ARCHIVED_CANDIDATES_SUBDIR = "candidates"
+
+#: Ledger reason for a page ``llmwiki remove`` archived because its last
+#: source went. A rebuild assigns it to every archived page found outside
+#: ``archive/candidates/`` — ``remove`` is the only writer of those paths.
+REMOVE_DISMISSAL_REASON = "archived by remove: last citing source removed"
 
 # Legacy reason-file layout (copied for rebuild only — ledger is SoT going forward).
 _REASON_FIELD_REASON = "Reason"
@@ -83,14 +90,15 @@ def load_ledger(wiki_dir: Path) -> DismissalLedger:
     """Load the ledger, auto-rebuilding from an existing archive when the file is missing.
 
     Missing file → :func:`rebuild_ledger_from_archive` (imports legacy
-    ``*.reason.txt`` + stubs, then saves). With no archive directory there is
-    nothing to import, so the read returns an empty ledger and writes nothing.
+    ``*.reason.txt`` + stubs + ``remove``-archived pages, then saves). With no
+    ``wiki/archive/`` there is nothing to import, so the read returns an empty
+    ledger and writes nothing.
     Present but unreadable / invalid JSON → raises. Wrong schema shape →
     ``ValueError``.
     """
     path = ledger_path(wiki_dir)
     if not path.is_file():
-        if not archive_candidates_dir(wiki_dir).is_dir():
+        if not (wiki_dir / ARCHIVE_FOLDER).is_dir():
             return empty_ledger()
         return rebuild_ledger_from_archive(wiki_dir)
     try:
@@ -208,14 +216,19 @@ def iter_merges(wiki_dir: Path) -> Iterator[MergeRecord]:
 
 
 def build_ledger_from_archive(wiki_dir: Path) -> DismissalLedger:
-    """Scan archived stubs (+ legacy ``*.reason.txt``) into a ledger — no write.
+    """Scan the archive (+ legacy ``*.reason.txt``) into a ledger — no write.
 
-    Walks ``wiki/archive/candidates/**/*.md``. A sibling ``<stem>.reason.txt``
-    whose ``Reason:`` value is ``merged into <slug>`` becomes a merge entry;
-    any other reason (including missing reason file) becomes a dismissal.
-    First occurrence of each ``norm_page_key`` wins (sorted walk order).
-    Callers that want the file on disk use :func:`rebuild_ledger_from_archive`
-    or :func:`save_ledger`.
+    Walks ``wiki/archive/candidates/**/*.md`` first. A sibling
+    ``<stem>.reason.txt`` whose ``Reason:`` value is ``merged into <slug>``
+    becomes a merge entry; any other reason (including missing reason file)
+    becomes a dismissal. Then walks the rest of ``wiki/archive/`` — pages
+    ``llmwiki remove`` archived (#277) — and records a dismissal under
+    :data:`REMOVE_DISMISSAL_REASON` for the filename stem and the frontmatter
+    ``title`` of each, with ``stub`` relative to ``archive/candidates/``
+    (``../entities/Foo.md``), so a rebuild keeps those names settled.
+    First occurrence of each ``norm_page_key`` wins (candidates before
+    ``remove`` pages, each in sorted walk order). Callers that want the file
+    on disk use :func:`rebuild_ledger_from_archive` or :func:`save_ledger`.
     """
     root = archive_candidates_dir(wiki_dir)
     dismissals: list[DismissalRecord] = []
@@ -272,6 +285,30 @@ def build_ledger_from_archive(wiki_dir: Path) -> DismissalLedger:
                 "stub": stub,
             })
 
+    archive_root = wiki_dir / ARCHIVE_FOLDER
+    if archive_root.is_dir():
+        for path in sorted(archive_root.rglob("*.md")):
+            if path.is_relative_to(root):
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            title = parse_frontmatter(text)[0].get("title")
+            stub = Path(os.path.relpath(path, root)).as_posix()
+            for name in (path.stem, str(title).strip() if title else ""):
+                key = norm_page_key(name)
+                if not key or key in seen_dismiss:
+                    continue
+                seen_dismiss.add(key)
+                dismissals.append({
+                    "key": key,
+                    "name": name,
+                    "reason": REMOVE_DISMISSAL_REASON,
+                    "discarded_at": "",
+                    "stub": stub,
+                })
+
     return {
         "version": LEDGER_VERSION,
         "dismissals": dismissals,
@@ -280,7 +317,8 @@ def build_ledger_from_archive(wiki_dir: Path) -> DismissalLedger:
 
 
 def rebuild_ledger_from_archive(wiki_dir: Path) -> DismissalLedger:
-    """Rebuild the ledger from archived stubs and legacy ``*.reason.txt`` files.
+    """Rebuild the ledger from archived stubs, legacy ``*.reason.txt`` files and
+    ``remove``-archived pages.
 
     Same scan as :func:`build_ledger_from_archive`, then persists the result.
     Idempotent: a second run that sees the same archive writes the same ledger.

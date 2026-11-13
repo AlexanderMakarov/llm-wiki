@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from llmwiki.candidates import archived_candidate_names, candidate_filename
+from llmwiki.dismissal_ledger import iter_dismissals
 from llmwiki.reindex import reindex_wiki
 from llmwiki.source_topics import TopicRecord, parse_source_topics
 from llmwiki.vault_settings import DEFAULT_MIN_REFS
@@ -91,6 +92,11 @@ def harvest_targets(
         if not p.is_relative_to(candidates_root)
     }
     resolved |= set(archived_candidate_names(wiki_dir))
+    # The ledger is the durable record of "do not propose again". `remove`
+    # writes a row for each curated page it archives (#277), and that page may
+    # sit outside `archive/candidates/`, so the archive scan alone cannot be
+    # relied on to settle the name.
+    resolved |= {rec["key"] for rec in iter_dismissals(wiki_dir) if rec["key"]}
 
     texts_by_rel: dict[str, str] = {}
     unreadable: list[tuple[str, str]] = []

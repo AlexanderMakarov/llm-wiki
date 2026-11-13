@@ -34,6 +34,9 @@ wiki/          LLM-maintained. Pages you write that summarise and cross-referenc
   projects/        Codebases and work streams (seeded from session metadata).
   syntheses/       Saved query answers. Written by an agent or a person answering a
                    question — no pipeline step generates one.
+  archive/         Cold storage, not a live page set: candidates a reviewer dismissed as
+                   noise, and pages `llmwiki remove` archives after their last source is
+                   removed. Their names stay settled so harvest does not re-propose them.
 
 site/          GENERATED. Static HTML from `python3 -m llmwiki build`. Do not edit.
 ```

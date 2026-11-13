@@ -30,7 +30,8 @@ wiki/          YOU OWN THIS. LLM-generated pages that summarise, cross-reference
   projects/        Codebases and work streams, seeded from session metadata (kebab-case slug).
   syntheses/       Saved query answers (kebab-case slug). Written by an agent or a
                    person answering a question — no pipeline step generates one.
-  archive/         Cold storage: candidates a reviewer dismissed as noise, kept for
+  archive/         Cold storage: candidates a reviewer dismissed as noise, and pages
+                   `llmwiki remove` archives after their last source is removed, kept for
                    history. Not a live page set — never catalogued in index.md, linted,
                    a graph node, tagged, or searchable/quotable via MCP. Discard turns
                    every [[wikilink]] to the name into plain text (or, with --redirect,
