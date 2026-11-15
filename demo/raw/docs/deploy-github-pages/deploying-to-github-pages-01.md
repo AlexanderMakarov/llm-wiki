@@ -81,7 +81,7 @@ Run the same check by hand against any deployed site:
 python3 scripts/check_live_version.py --url https://<username>.github.io/<repo-name>/
 ```
 
-It exits 0 on a match, 1 when the site is stale, 2 when the manifest is unreachable, and 3 when it cannot be parsed. The same check runs automatically after every Pages deploy; there is no separate scheduled freshness workflow — release/tag deploys are the gate (see [uptime.md](../uptime.md)).
+It exits 0 on a match, 1 when the site is stale, 2 when the manifest is unreachable, and 3 when it cannot be parsed. Both Pages publishers run this check after deploy: `pages.yml` (version tag or manual dispatch) and `demo-session-freshness.yml` (cron `0 4 */6 * *` and `workflow_dispatch`, #225). See the repo's [GitHub Pages deploy guide](https://github.com/AlexanderMakarov/llm-wiki/blob/main/docs/deploy/github-pages.md) for the full publisher list.
 
 ## Using your own session data
 

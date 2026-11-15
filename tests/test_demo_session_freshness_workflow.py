@@ -26,7 +26,6 @@ FRESHNESS_YML = REPO_ROOT / ".github" / "workflows" / "demo-session-freshness.ym
 
 # Docs that must cross-reference the freshness workflow
 RELEASE_PROCESS = REPO_ROOT / "docs" / "maintainers" / "RELEASE_PROCESS.md"
-UPTIME_DOC = REPO_ROOT / "docs" / "uptime.md"
 GITHUB_PAGES_DOC = REPO_ROOT / "docs" / "deploy" / "github-pages.md"
 SKILL_FILE = REPO_ROOT / ".claude" / "skills" / "release" / "SKILL.md"
 REFRESH_DEMO_DOC = REPO_ROOT / "docs" / "maintainers" / "REFRESH_DEMO.md"
@@ -279,21 +278,6 @@ def test_release_process_names_freshness_workflow():
     )
 
 
-def test_uptime_doc_names_freshness_workflow():
-    """docs/uptime.md must name demo-session-freshness.yml as a Pages publisher.
-
-    The uptime doc describes both publishers of the shared Pages URL.  Omitting
-    the freshness schedule leaves operators unaware of the second publisher.
-    """
-    # @spec: 225-demo-release-freshness
-    # @regression
-    text = UPTIME_DOC.read_text(encoding="utf-8")
-    assert "demo-session-freshness.yml" in text, (
-        "docs/uptime.md must document demo-session-freshness.yml as the "
-        "scheduled Pages publisher (#225)"
-    )
-
-
 def test_github_pages_doc_names_freshness_workflow():
     """docs/deploy/github-pages.md must name demo-session-freshness.yml as the schedule publisher.
 
@@ -345,7 +329,6 @@ def test_no_stale_claim_about_no_separate_freshness_schedule():
     # @regression
     docs_to_check = {
         "RELEASE_PROCESS.md": RELEASE_PROCESS,
-        "uptime.md": UPTIME_DOC,
         "github-pages.md": GITHUB_PAGES_DOC,
         "release SKILL.md": SKILL_FILE,
     }

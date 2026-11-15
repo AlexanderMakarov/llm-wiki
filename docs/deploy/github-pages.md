@@ -52,7 +52,7 @@ No secrets or tokens are required. The workflow uses GitHub's built-in `actions/
 
 ## Step 4: Publish
 
-Three ways to publish the same site URL (see [uptime.md](../uptime.md)):
+Three ways to publish the same site URL:
 
 - **Push a version tag.** `git push origin v2.2.0` runs `pages.yml` alongside `release.yml`, so the live demo moves with the release’s **committed** vault (#213).
 - **Run `pages.yml` by hand.** **Actions → Deploy demo site to GitHub Pages → Run workflow** — for republishing the committed demo after a vault change, or the first deploy once Pages is enabled.

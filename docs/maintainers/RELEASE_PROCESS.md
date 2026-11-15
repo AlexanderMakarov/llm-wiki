@@ -100,7 +100,7 @@ The same tag push that triggers `release.yml` also triggers [`.github/workflows/
 - [ ] Spot-check the live demo shows the new version **and**, unless demo refresh was explicitly skipped, that session dates match what you committed (version-only green is not a content refresh — #225)
 - [ ] If the deploy failed, fix `main` first and re-run the workflow from **Actions → Deploy demo site to GitHub Pages → Run workflow**; do not hotfix by rewriting the tag
 
-Two publishers share one GitHub Pages site (#225; see [docs/uptime.md](../uptime.md) and [docs/deploy/github-pages.md](../deploy/github-pages.md)):
+Two publishers share one GitHub Pages site (#225; see [docs/deploy/github-pages.md](../deploy/github-pages.md)):
 
 - **Release / tag `pages.yml`:** publishes the **committed** full demo (sessions + docs + synth + usage). Post-deploy assert: live `manifest.json` version matches that tag’s `__version__`.
 - **Schedule `demo-session-freshness.yml`:** cron `0 4 */6 * *` (+ `workflow_dispatch`); checks out `main`; offline `generate_demo_sessions.py --today` (UTC); build + deploy Pages; **no** git write; **no** synth/LLM; **no** docs or usage regen. Post-deploy assert uses `main`’s `__version__` (may be ahead of the last tag until the next cut).

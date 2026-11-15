@@ -9,7 +9,7 @@ page without descending into a tree. -->
 ## Overview (1)
 - [Overview](overview.md)
 
-## Sources (163)
+## Sources (162)
 - [02 · First sync](sources/02-first-sync/2026-08-10-02-first-sync.md) — 02-first-sync · 2026-08-10
 - [04 · Use with Codex CLI](sources/04-use-with-codex-cli/2026-08-10-04-use-with-codex-cli.md) — 04-use-with-codex-cli · 2026-08-10
 - [05 · Query your wiki](sources/05-query-your-wiki/2026-08-10-05-query-your-wiki.md) — 05-query-your-wiki · 2026-08-10
@@ -171,7 +171,6 @@ page without descending into a tree. -->
 - [Upgrade guide (part 6/8: Downgrading is guarded (#29))](sources/upgrading/2026-09-28-upgrade-guide-06.md) — upgrading · 2026-09-28
 - [Upgrade guide (part 7/8: v1.3.0 — consolidated 1.2.x patch roll-up)](sources/upgrading/2026-09-28-upgrade-guide-07.md) — upgrading · 2026-09-28
 - [Upgrade guide (part 8/8: v1.1.0-rc4)](sources/upgrading/2026-09-28-upgrade-guide-08.md) — upgrading · 2026-09-28
-- [Uptime Monitoring](sources/uptime/2026-09-28-uptime-monitoring.md) — uptime · 2026-09-28
 - [Windows setup](sources/windows-setup/2026-09-28-windows-setup.md) — windows-setup · 2026-09-28
 
 ## Entities (7)
