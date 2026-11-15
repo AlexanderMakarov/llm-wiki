@@ -24,6 +24,9 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Removed
 
+- **Uptime monitoring guide (#288)** — deleted `docs/uptime.md`, which documented a non-existent `.github/workflows/uptime.yml` schedule and pasteable badge; deploy and release docs already describe the real GitHub Pages publishers and post-deploy version checks (#225).
+  - *Release note:* The fake uptime workflow doc is gone; use the GitHub Pages and release-process guides for demo publishing and freshness (#288).
+
 - **Dead consumption surfaces (#215)** — removed the stale `integrations/` tree (phantom directories and v1.2.0-deleted exporter docs) and the broken “Export to qmd” section from `docs/api-guide.md`. Dropped `integrations/` from the AWOS context gate armed prefixes. CI guards: `tests/test_docs_imports_resolve.py` (documented `llmwiki` imports, README path links, armed-prefix directories).
   - *Release note:* Copy-paste API examples and integration README rows now match what ships; documented imports and README directory links are tested in CI (#215).
 
