@@ -4,9 +4,6 @@ Deciding is DOM state, so the page needs nothing running; only executing the
 decisions is a command-line step. The tests below cover both halves — the
 rendered controls in Python, and the batch the page's own script builds, run
 under `node` with a stub DOM (skipped when node is absent).
-
-# @spec: 414-tests-render-mirror
-# #315
 """
 
 from __future__ import annotations
@@ -37,12 +34,11 @@ from llmwiki.candidates_site import (
     validate_candidate_batch,
     vault_display_path,
 )
-from tests.render._paths import REPO_ROOT
+from tests._paths import REPO_ROOT
 
 needs_node = pytest.mark.skipif(
     shutil.which("node") is None, reason="node not on PATH"
 )
-
 
 def _js_block(js: str, marker: str) -> str:
     """The declaration starting at `marker`, up to its balanced closing brace."""
@@ -56,7 +52,6 @@ def _js_block(js: str, marker: str) -> str:
             if depth == 0:
                 return js[start : i + 1]
     raise AssertionError(f"unbalanced braces after {marker!r}")
-
 
 _ROW_STUB = """
 function mkRow(spec) {
@@ -77,7 +72,6 @@ function mkRow(spec) {
   };
 }
 """
-
 
 def _collect_actions(
     specs: list[dict[str, str]],
@@ -118,7 +112,6 @@ def _collect_actions(
     )
     return json.loads(proc.stdout)
 
-
 def _filter_targets(names: list[str], query: str, tmp_path: Path) -> list[str]:
     """Run the dropdown's own `filterTargets()` over `names` under node."""
     script = tmp_path / "filter.js"
@@ -135,14 +128,12 @@ def _filter_targets(names: list[str], query: str, tmp_path: Path) -> list[str]:
     )
     return json.loads(proc.stdout)
 
-
 def _mk_wiki(tmp_path: Path) -> Path:
     wiki = tmp_path / "wiki"
     for kind in ("entities", "concepts"):
         (wiki / kind).mkdir(parents=True, exist_ok=True)
         (wiki / "candidates" / kind).mkdir(parents=True, exist_ok=True)
     return wiki
-
 
 def _write_candidate(wiki: Path, kind: str, slug: str, *, body: str = "") -> Path:
     path = wiki / "candidates" / kind / f"{slug}.md"
@@ -153,7 +144,6 @@ def _write_candidate(wiki: Path, kind: str, slug: str, *, body: str = "") -> Pat
         encoding="utf-8",
     )
     return path
-
 
 def test_render_candidates_body_lists_pending_and_offers_the_batch(tmp_path: Path) -> None:
     """The candidates body lists pending entity and concept rows and offers one batch command field."""
@@ -173,7 +163,6 @@ def test_render_candidates_body_lists_pending_and_offers_the_batch(tmp_path: Pat
     payload = candidates_payload(wiki)
     assert payload["summary"]["to_review"] == 2
 
-
 def test_each_table_has_name_description_and_decision(tmp_path: Path) -> None:
     # @regression
     """Reviewing means judging a row, so every row carries a Decision cell."""
@@ -190,7 +179,6 @@ def test_each_table_has_name_description_and_decision(tmp_path: Path) -> None:
     assert html_out.count('class="cand-discard-reason"') == 2
     assert 'id="cand-apply"' in html_out
 
-
 def test_decision_vocabulary_matches_what_the_cli_accepts(tmp_path: Path) -> None:
     # @regression
     """A decision the page offers that `candidates apply` rejects is a dead end."""
@@ -203,7 +191,6 @@ def test_decision_vocabulary_matches_what_the_cli_accepts(tmp_path: Path) -> Non
     offered = set(re.findall(r'<option value="([^"]*)"', cell))
 
     assert offered == {"", *_VALID_ACTIONS}
-
 
 def test_no_row_starts_out_decided(tmp_path: Path) -> None:
     # @regression
@@ -224,7 +211,6 @@ def test_no_row_starts_out_decided(tmp_path: Path) -> None:
         assert "selected" not in select
     assert 'id="cand-command"></pre>' in html_out
 
-
 def test_the_page_reaches_no_server(tmp_path: Path) -> None:
     # @regression
     """Deciding is DOM state: nothing is posted, nothing is fetched."""
@@ -237,7 +223,6 @@ def test_the_page_reaches_no_server(tmp_path: Path) -> None:
     assert "XMLHttpRequest" not in html_out
     assert "/api/candidates" not in html_out
     assert "https://" not in html_out
-
 
 def test_merge_targets_offer_trusted_pages_then_peers(tmp_path: Path) -> None:
     """`merge --into` resolves a trusted page first, then a same-table stub."""
@@ -254,7 +239,6 @@ def test_merge_targets_offer_trusted_pages_then_peers(tmp_path: Path) -> None:
     html_out = render_candidates_body(wiki)
     assert 'id="cand-targets-entities"' in html_out
     assert 'id="cand-targets-concepts"' in html_out
-
 
 def test_every_row_gets_a_dropdown_over_the_valid_targets(tmp_path: Path) -> None:
     # @regression
@@ -286,7 +270,6 @@ def test_every_row_gets_a_dropdown_over_the_valid_targets(tmp_path: Path) -> Non
     for list_id in list_ids:
         assert f'<ul class="cand-combo-list" id="{list_id}" role="listbox"' in html_out
 
-
 def test_the_target_list_is_embedded_once_however_many_rows(tmp_path: Path) -> None:
     """A vault with a long backlog must not repeat the target names per row."""
     wiki = _mk_wiki(tmp_path)
@@ -300,7 +283,6 @@ def test_the_target_list_is_embedded_once_however_many_rows(tmp_path: Path) -> N
     # names live in the two lists, not once per row.
     assert html_out.count("<option ") == 12 * (len(_VALID_ACTIONS) + 1)
 
-
 def test_discard_asks_for_the_reason_it_archives(tmp_path: Path) -> None:
     # @regression
     """`discard` files the reason beside the archived stub, so it is required."""
@@ -312,7 +294,6 @@ def test_discard_asks_for_the_reason_it_archives(tmp_path: Path) -> None:
     assert 'class="cand-discard-reason" type="text" aria-required="true"' in html_out
     assert 'placeholder="why it is rejected"' in html_out
     assert "optional" not in html_out
-
 
 def test_render_candidates_body_command_names_the_vault(tmp_path: Path) -> None:
     # @regression
@@ -328,11 +309,9 @@ def test_render_candidates_body_command_names_the_vault(tmp_path: Path) -> None:
     assert json.dumps(apply_command_prefix(vault)) in html_out
     assert vault in html_out
 
-
 def test_apply_command_prefix_names_the_vault_and_stops_before_the_batch() -> None:
     """The page appends the shell-quoted batch, so a reviewer copies one line."""
     assert apply_command_prefix("demo") == "llmwiki candidates apply --vault 'demo'"
-
 
 def test_vault_display_path_is_relative_when_the_vault_is_under_cwd(
     tmp_path: Path, monkeypatch,
@@ -342,7 +321,6 @@ def test_vault_display_path_is_relative_when_the_vault_is_under_cwd(
     (vault / "wiki").mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
     assert vault_display_path(vault / "wiki") == "demo"
-
 
 def test_cli_command_for_action_shapes() -> None:
     """Each review action renders to its `llmwiki candidates <action>` command with the flags it needs."""
@@ -355,7 +333,6 @@ def test_cli_command_for_action_shapes() -> None:
     assert "--into 'Baz'" in cli_command_for_action({
         "action": "merge", "slug": "Dup", "into": "Baz", "kind": "entities",
     })
-
 
 def test_cli_command_for_actions_batch_one_line() -> None:
     """A batch renders to a single-line `candidates apply --actions '<json>'` command whose payload is valid JSON."""
@@ -373,7 +350,6 @@ def test_cli_command_for_actions_batch_one_line() -> None:
     assert len(payload) == 2
     assert payload[0]["slug"] == "Obsidian"
 
-
 def test_apply_candidate_actions_batch(tmp_path: Path) -> None:
     """Applying a promote+discard batch moves the promoted page into the wiki and clears both candidates."""
     wiki = _mk_wiki(tmp_path)
@@ -387,7 +363,6 @@ def test_apply_candidate_actions_batch(tmp_path: Path) -> None:
     assert (wiki / "entities" / "Keep.md").is_file()
     assert not (wiki / "candidates" / "entities" / "Keep.md").exists()
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
-
 
 def test_apply_refuses_a_batch_row_whose_slug_escapes_the_wiki(tmp_path: Path) -> None:
     """# @layer: unit  # @spec: 282-discarded-topic-links"""
@@ -411,9 +386,7 @@ def test_apply_refuses_a_batch_row_whose_slug_escapes_the_wiki(tmp_path: Path) -
     assert outside.read_text(encoding="utf-8") == "untouchable\n"
     assert (wiki / "candidates" / "entities" / "Keep.md").is_file()
 
-
 # ─── #149 batch conflict validation ──────────────────────────────────────
-
 
 @pytest.mark.parametrize(
     ("peer_action", "peer_extra"),
@@ -441,7 +414,6 @@ def test_validate_candidate_batch_refuses_merge_into_acted_on_peer(
     with pytest.raises(ValueError, match=r"batch conflict: merge 'Dupe' into 'Target'"):
         validate_candidate_batch([peer, merge])
 
-
 def test_apply_candidate_actions_refuses_conflicting_batch_without_mutating(
     tmp_path: Path,
 ) -> None:
@@ -463,7 +435,6 @@ def test_apply_candidate_actions_refuses_conflicting_batch_without_mutating(
     assert sorted(p.name for p in cand_dir.iterdir()) == before_candidates
     assert sorted(p.name for p in (wiki / "entities").iterdir()) == before_entities
 
-
 def test_collect_actions_refuses_merge_into_acted_on_peer(tmp_path: Path) -> None:
     # @regression  #149
     """The page's collectActions() mirrors validate_candidate_batch before copy."""
@@ -474,7 +445,6 @@ def test_collect_actions_refuses_merge_into_acted_on_peer(tmp_path: Path) -> Non
     assert not out["ok"], out
     assert "batch conflict: merge 'Dupe' into 'Target'" in out["error"]
     assert "conflicts with promote 'Target'" in out["error"]
-
 
 def test_cli_candidates_apply_batch_conflict_exits_2(tmp_path: Path) -> None:
     """A batch that discards a merge target exits 2 with a `batch conflict` error."""
@@ -504,7 +474,6 @@ def test_cli_candidates_apply_batch_conflict_exits_2(tmp_path: Path) -> None:
     assert (wiki / "candidates" / "entities" / "Dupe.md").is_file()
     assert not (wiki / "entities" / "Target.md").exists()
 
-
 def test_apply_candidate_actions_accepts_non_conflicting_merge_and_promote(
     tmp_path: Path,
 ) -> None:
@@ -527,7 +496,6 @@ def test_apply_candidate_actions_accepts_non_conflicting_merge_and_promote(
     assert (wiki / "entities" / "Canonical.md").is_file()
     assert not (wiki / "candidates" / "entities" / "Dupe.md").exists()
 
-
 def test_render_candidates_body_prints_the_command_it_hands_off_to(tmp_path: Path) -> None:
     """The body ships an empty command element and the `candidates apply` prefix that Apply later fills in."""
     wiki = _mk_wiki(tmp_path)
@@ -539,9 +507,7 @@ def test_render_candidates_body_prints_the_command_it_hands_off_to(tmp_path: Pat
     assert 'id="cand-command"></pre>' in html_out
     assert apply_command_prefix(vault_display_path(wiki)).split(" --vault ")[0] in html_out
 
-
 # ─── the batch Apply assembles ───────────────────────────────────────────
-
 
 @needs_node
 def test_apply_batches_only_the_rows_a_reviewer_decided(tmp_path: Path) -> None:
@@ -560,7 +526,6 @@ def test_apply_batches_only_the_rows_a_reviewer_decided(tmp_path: Path) -> None:
         {"action": "flip-promote", "slug": "Beta", "kind": "concepts"},
     ]
 
-
 @needs_node
 def test_apply_carries_the_field_each_action_needs(tmp_path: Path) -> None:
     """Merge actions carry their target and discard actions their reason into the assembled batch."""
@@ -577,7 +542,6 @@ def test_apply_carries_the_field_each_action_needs(tmp_path: Path) -> None:
         {"action": "discard", "slug": "Quiet", "kind": "concepts", "reason": "off topic"},
     ]
 
-
 @needs_node
 def test_apply_refuses_a_merge_with_no_target(tmp_path: Path) -> None:
     """Apply rejects a merge decision that names no target and reports the offending candidate."""
@@ -586,7 +550,6 @@ def test_apply_refuses_a_merge_with_no_target(tmp_path: Path) -> None:
     ], tmp_path)
     assert not out["ok"]
     assert "Dupe" in out["error"]
-
 
 @needs_node
 def test_typing_narrows_the_targets_case_insensitively(tmp_path: Path) -> None:
@@ -599,7 +562,6 @@ def test_typing_narrows_the_targets_case_insensitively(tmp_path: Path) -> None:
     assert _filter_targets(names, "cod", tmp_path) == ["Claude Code", "Codex CLI"]
     assert _filter_targets(names, "  caching  ", tmp_path) == ["Prompt Caching"]
     assert _filter_targets(names, "zzz", tmp_path) == []
-
 
 @needs_node
 def test_apply_refuses_a_merge_into_a_page_that_is_not_offered(tmp_path: Path) -> None:
@@ -626,7 +588,6 @@ def test_apply_refuses_a_merge_into_a_page_that_is_not_offered(tmp_path: Path) -
         {"action": "merge", "slug": "Dupe", "kind": "entities", "into": "Target"},
     ]
 
-
 @needs_node
 def test_apply_refuses_a_discard_with_no_reason(tmp_path: Path) -> None:
     # @regression
@@ -640,7 +601,6 @@ def test_apply_refuses_a_discard_with_no_reason(tmp_path: Path) -> None:
     assert "Noise" in out["error"]
     assert "reason" in out["error"]
 
-
 @needs_node
 def test_apply_refuses_an_empty_batch(tmp_path: Path) -> None:
     """Apply rejects a batch in which no row has a decision."""
@@ -649,7 +609,6 @@ def test_apply_refuses_an_empty_batch(tmp_path: Path) -> None:
     ], tmp_path)
     assert not out["ok"]
     assert "Decision" in out["error"]
-
 
 @needs_node
 def test_the_assembled_batch_is_what_apply_executes(tmp_path: Path) -> None:
@@ -684,7 +643,6 @@ def test_the_assembled_batch_is_what_apply_executes(tmp_path: Path) -> None:
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
     assert not (wiki / "candidates" / "entities" / "Dupe.md").exists()
 
-
 def test_candidate_description_truncates(tmp_path: Path) -> None:
     """A long candidate description is truncated with an ellipsis to at most 160 characters."""
     wiki = _mk_wiki(tmp_path)
@@ -694,7 +652,6 @@ def test_candidate_description_truncates(tmp_path: Path) -> None:
     desc = rows[0]["description"]
     assert desc.endswith("…")
     assert len(desc) <= 160
-
 
 def test_render_candidates_page_writes_html(tmp_path: Path) -> None:
     """`render_candidates_page` writes `candidates.html` containing the candidate row and the command field."""
@@ -708,9 +665,7 @@ def test_render_candidates_page_writes_html(tmp_path: Path) -> None:
     assert "Gamma" in text
     assert "cand-command" in text
 
-
 # ─── prior dismissal near-match (#146 / #326) ───────────────────────────
-
 
 def test_candidates_payload_includes_prior_dismissal(tmp_path: Path) -> None:
     """Site payload carries prior_dismissals from list_candidates — no browser match.
@@ -731,7 +686,6 @@ def test_candidates_payload_includes_prior_dismissal(tmp_path: Path) -> None:
     assert priors[0]["ratio"] >= 0.90
     assert rows["FooBars"]["prior_dismissal"] == priors[0]
     assert "prior_dismissals" not in rows["Unrelated"]
-
 
 @needs_node
 def test_apply_maps_discard_prior_to_discard_with_prior_reason(tmp_path: Path) -> None:
@@ -757,7 +711,6 @@ def test_apply_maps_discard_prior_to_discard_with_prior_reason(tmp_path: Path) -
         },
     ]
 
-
 def test_name_cell_shows_prior_dismissal_line(tmp_path: Path) -> None:
     """Name cell muted secondary line matches the approved site mockup.
 
@@ -781,7 +734,6 @@ def test_name_cell_shows_prior_dismissal_line(tmp_path: Path) -> None:
     assert "Discard with prior reason" in html_out
     assert 'data-prior-reason="hosting detail, not subject matter"' in html_out
 
-
 def test_name_cell_empty_reason_uses_placeholder(tmp_path: Path) -> None:
     """Blank discard reason renders as (discarded without explanation) on the site.
 
@@ -796,7 +748,6 @@ def test_name_cell_empty_reason_uses_placeholder(tmp_path: Path) -> None:
 
     assert f"&quot;ApiClient&quot; — {EMPTY_REASON_DISPLAY}" in html_out
     assert "Discard with prior reason" in html_out
-
 
 def test_render_candidates_page_includes_prior_dismissal_line(tmp_path: Path) -> None:
     """Built candidates.html contains the Prior dismissal line for a near-match.
@@ -818,9 +769,7 @@ def test_render_candidates_page_includes_prior_dismissal_line(tmp_path: Path) ->
     assert "Prior dismissals:" in text
     assert "Discard with prior reason" in text
 
-
 # ─── discard --redirect (#282) ──────────────────────────────────────────
-
 
 @needs_node
 def test_apply_carries_an_optional_discard_redirect(tmp_path: Path) -> None:
@@ -837,7 +786,6 @@ def test_apply_carries_an_optional_discard_redirect(tmp_path: Path) -> None:
         {"action": "discard", "slug": "Quiet", "kind": "concepts", "reason": "junk"},
     ]
 
-
 def test_discard_row_offers_a_redirect_field(tmp_path: Path) -> None:
     """Each candidate row ships a hidden redirect field for the discard decision."""
     wiki = _mk_wiki(tmp_path)
@@ -845,7 +793,6 @@ def test_discard_row_offers_a_redirect_field(tmp_path: Path) -> None:
     html_out = render_candidates_body(wiki)
     assert 'class="cand-redirect-wrap muted" hidden' in html_out
     assert 'class="cand-discard-redirect"' in html_out
-
 
 def test_cli_command_for_discard_with_redirect() -> None:
     """A discard with a redirect renders `--reason` and `--redirect` flags in the CLI command."""
@@ -855,7 +802,6 @@ def test_cli_command_for_discard_with_redirect() -> None:
     assert cmd == (
         "llmwiki candidates discard --slug 'Old Name' --reason 'dup' --redirect 'Proper'"
     )
-
 
 @pytest.mark.parametrize("action", ["promote", "flip-promote", "merge"])
 def test_redirect_is_refused_on_anything_but_discard(action: str) -> None:
@@ -868,7 +814,6 @@ def test_redirect_is_refused_on_anything_but_discard(action: str) -> None:
     ):
         with pytest.raises(ValueError, match="redirect applies only to discard"):
             call()
-
 
 def test_apply_scans_the_wiki_once_for_a_batch_of_discards(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
@@ -907,7 +852,6 @@ def test_apply_scans_the_wiki_once_for_a_batch_of_discards(
         text = (wiki / "sources" / f"src-{slug}.md").read_text(encoding="utf-8")
         assert text == f"See {slug} twice: it.\n"
 
-
 def test_batched_discards_of_two_stubs_sharing_a_name_report_per_row(
     tmp_path: Path,
 ) -> None:
@@ -934,7 +878,6 @@ def test_batched_discards_of_two_stubs_sharing_a_name_report_per_row(
         (wiki / "sources" / "s.md").read_text(encoding="utf-8")
         == "See [[Keeper|Dup]].\n"
     )
-
 
 def test_apply_candidate_actions_discard_redirect(tmp_path: Path) -> None:
     """# @layer: integration  # @spec: 282-discarded-topic-links"""

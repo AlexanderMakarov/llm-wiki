@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 from llmwiki.cli import build_parser
-from tests.cli._paths import REPO_ROOT
+from tests._paths import REPO_ROOT
 
 README = REPO_ROOT / "README.md"
 

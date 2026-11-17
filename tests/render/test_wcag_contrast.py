@@ -19,9 +19,6 @@ the per-commit guard so a CSS edit can't regress contrast silently.
 #480 (merged from the former ``test_chip_contrast``): the yellow chip text
 was bumped from ``#b45309`` to ``#92400e`` so it passes 4.5:1 on ``#fef3c7``;
 the parametrized freshness-chip check pins that fix for every chip and theme.
-
-# @spec: 414-tests-render-mirror
-# #315
 """
 from __future__ import annotations
 
@@ -36,14 +33,11 @@ from llmwiki.render.css import CSS
 AA_NORMAL = 4.5
 AA_LARGE = 3.0
 
-
 # ─── Pure WCAG math, no deps ──────────────────────────────────────────
-
 
 def _hex_to_rgb(h: str) -> tuple[int, int, int]:
     h = h.lstrip("#")
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-
 
 def _rel_lum(rgb: tuple[int, int, int]) -> float:
     def _ch(c: int) -> float:
@@ -53,12 +47,10 @@ def _rel_lum(rgb: tuple[int, int, int]) -> float:
     r, g, b = rgb
     return 0.2126 * _ch(r) + 0.7152 * _ch(g) + 0.0722 * _ch(b)
 
-
 def _contrast(fg: tuple[int, int, int], bg: tuple[int, int, int]) -> float:
     fl, bl = _rel_lum(fg), _rel_lum(bg)
     lo, hi = min(fl, bl), max(fl, bl)
     return (hi + 0.05) / (lo + 0.05)
-
 
 def _alpha_blend(
     fg_rgba: tuple[int, int, int, float],
@@ -74,9 +66,7 @@ def _alpha_blend(
         round(b * a + bb * (1 - a)),
     )
 
-
 # ─── Theme palette pulled from CSS ────────────────────────────────────
-
 
 def _css_var(theme: str, name: str) -> str:
     """Read a `--var: #hex;` from the appropriate :root block in CSS."""
@@ -92,9 +82,7 @@ def _css_var(theme: str, name: str) -> str:
     assert var_match, f"variable {name!r} not found in {theme} :root"
     return var_match.group(1)
 
-
 # ─── Static text-on-bg pairs (the most prominent surfaces) ────────────
-
 
 PAIRS = [
     # (theme, fg_var, bg_var, threshold, label)
@@ -112,7 +100,6 @@ PAIRS = [
     ("dark", "--accent", "--bg-card", AA_NORMAL, "accent on bg-card"),
 ]
 
-
 @pytest.mark.parametrize("theme,fg_var,bg_var,thresh,label", PAIRS)
 def test_palette_pair_meets_wcag_aa(
     theme: str, fg_var: str, bg_var: str, thresh: float, label: str
@@ -126,11 +113,9 @@ def test_palette_pair_meets_wcag_aa(
         f"threshold {thresh}:1 ({fg_var} on {bg_var})"
     )
 
-
 # ─── Live-CSS rule readers ────────────────────────────────────────────
 
 _HEX6 = r"#[0-9a-fA-F]{6}"
-
 
 def _rule_body(selector: str, theme: str) -> str:
     """Return the declaration block of ``selector`` for ``theme`` as emitted in the live CSS."""
@@ -139,12 +124,10 @@ def _rule_body(selector: str, theme: str) -> str:
     assert m, f"could not locate {theme} rule for {selector!r} in CSS"
     return m.group(1)
 
-
 def _declared_hex(selector: str, theme: str, prop: str) -> str:
     m = re.search(rf"(?<![-\w]){prop}\s*:\s*({_HEX6})", _rule_body(selector, theme))
     assert m, f"{theme} {selector}: no hex {prop} declared"
     return m.group(1)
-
 
 def _declared_rgba(selector: str, theme: str) -> tuple[int, int, int, float]:
     m = re.search(
@@ -155,7 +138,6 @@ def _declared_rgba(selector: str, theme: str) -> tuple[int, int, int, float]:
     r, g, b, a = m.groups()
     return int(r), int(g), int(b), float(a)
 
-
 # ─── Agent badge contrast (alpha-blended bg over page bg) ─────────────
 
 # Each agent badge in CSS has the shape
@@ -163,7 +145,6 @@ def _declared_rgba(selector: str, theme: str) -> tuple[int, int, int, float]:
 # and sits directly on the page bg (--bg), so the effective bg is the alpha-blend
 # of the rgba over the theme's page background. Colours are read from the live CSS.
 AGENTS = ["agent-claude", "agent-codex", "agent-copilot", "agent-cursor", "agent-gemini"]
-
 
 @pytest.mark.parametrize("theme", ["light", "dark"])
 @pytest.mark.parametrize("name", AGENTS)
@@ -179,9 +160,7 @@ def test_agent_badge_meets_aa(name: str, theme: str) -> None:
         f"text {fg_hex} on effective bg rgb{eff_bg}"
     )
 
-
 # ─── Freshness chip contrast, pinned against the live CSS (#480) ──────
-
 
 @pytest.mark.parametrize("theme", ["light", "dark"])
 @pytest.mark.parametrize("name", ["fresh-green", "fresh-yellow", "fresh-red"])
@@ -196,7 +175,6 @@ def test_freshness_chip_meets_aa(name: str, theme: str) -> None:
     bg = _declared_hex(selector, theme, "background")
     ratio = _contrast(_hex_to_rgb(fg), _hex_to_rgb(bg))
     assert ratio >= AA_NORMAL, f"{name} ({theme}): contrast {ratio:.2f}:1 < {AA_NORMAL}:1 (fg={fg}, bg={bg})"
-
 
 @pytest.mark.parametrize(
     "theme,card_bg",

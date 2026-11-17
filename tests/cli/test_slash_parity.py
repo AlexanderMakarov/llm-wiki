@@ -20,7 +20,7 @@ import re
 from pathlib import Path
 
 from llmwiki.cli import build_parser
-from tests.cli._paths import REPO_ROOT
+from tests._paths import REPO_ROOT
 
 AGENT_KIT_CMDS = REPO_ROOT / "llmwiki" / "agent_kit" / "commands"
 CONTRIBUTOR_CMDS = REPO_ROOT / ".claude" / "commands"

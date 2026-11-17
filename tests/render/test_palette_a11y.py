@@ -10,9 +10,6 @@ The fix swaps the gate to a `.open` class and adds:
   - focus restoration to the original trigger on close
 
 These tests pin the markup, CSS, and JS contracts.
-
-# @spec: 414-tests-render-mirror
-# #315
 """
 from __future__ import annotations
 
@@ -24,9 +21,7 @@ from llmwiki.render.js import JS
 def _foot() -> str:
     return page_foot()
 
-
 # ─── Markup contract ──────────────────────────────────────────────────
-
 
 def test_palette_markup_no_longer_uses_aria_hidden() -> None:
     """The palette container must NOT carry `aria-hidden="true"` —
@@ -35,16 +30,13 @@ def test_palette_markup_no_longer_uses_aria_hidden() -> None:
     assert '<div id="palette" class="palette">' in foot
     assert 'id="palette" class="palette" aria-hidden="true"' not in foot
 
-
 def test_help_dialog_markup_no_longer_uses_aria_hidden() -> None:
     """The help dialog container does not use `aria-hidden` as its visibility gate."""
     foot = _foot()
     assert '<div id="help-dialog" class="help-dialog">' in foot
     assert 'id="help-dialog" class="help-dialog" aria-hidden="true"' not in foot
 
-
 # ─── CSS contract ─────────────────────────────────────────────────────
-
 
 def test_css_uses_open_class_for_palette_visibility() -> None:
     """Visibility now driven by `.open` — make sure the rule exists
@@ -52,15 +44,12 @@ def test_css_uses_open_class_for_palette_visibility() -> None:
     assert ".palette.open { display: block; }" in CSS
     assert '.palette[aria-hidden="false"]' not in CSS
 
-
 def test_css_uses_open_class_for_help_visibility() -> None:
     """Help dialog visibility is driven by the `.open` class, not by an `aria-hidden` false selector."""
     assert ".help-dialog.open { display: block; }" in CSS
     assert '.help-dialog[aria-hidden="false"]' not in CSS
 
-
 # ─── JS contract — open / close + inert + focus restoration ───────────
-
 
 def test_js_dialog_open_helper_uses_inert_and_class() -> None:
     """__openDialog must (a) flip the `.open` class, (b) set `inert`
@@ -73,7 +62,6 @@ def test_js_dialog_open_helper_uses_inert_and_class() -> None:
     assert 'classList.add("open")' in JS
     assert 'setAttribute("inert"' in JS
     assert "__dialogLastFocus.set(dialog.id, document.activeElement)" in JS
-
 
 def test_js_dialog_close_helper_restores_focus_and_clears_inert() -> None:
     """Close must (a) flip class off, (b) remove `inert` from siblings,
@@ -89,7 +77,6 @@ def test_js_dialog_close_helper_restores_focus_and_clears_inert() -> None:
     assert "__dialogLastFocus.get(dialog.id)" in JS
     assert "lf.focus()" in JS
 
-
 def test_js_palette_uses_dialog_helpers() -> None:
     """Both open/close paths route through the shared helpers so the
     inert + focus contract is uniform across palette and help."""
@@ -98,7 +85,6 @@ def test_js_palette_uses_dialog_helpers() -> None:
     assert "__openDialog(p, input)" in open_block
     assert "__closeDialog(p)" in close_block
 
-
 def test_js_help_uses_dialog_helpers() -> None:
     """Opening and closing the help dialog route through the shared inert and focus-restoring dialog helpers."""
     open_block = JS[JS.find("function openHelp()"): JS.find("function closeHelp()")]
@@ -106,9 +92,7 @@ def test_js_help_uses_dialog_helpers() -> None:
     assert "__openDialog(d" in open_block
     assert "__closeDialog(d)" in close_block
 
-
 # ─── JS contract — focus trap on Tab / Shift+Tab ──────────────────────
-
 
 def test_js_traps_tab_inside_dialog() -> None:
     """A `__trapTab` helper must wrap focus inside the dialog so Tab
@@ -119,7 +103,6 @@ def test_js_traps_tab_inside_dialog() -> None:
     assert "shiftKey && document.activeElement === first" in JS
     assert "!e.shiftKey && document.activeElement === last" in JS
 
-
 def test_js_focusable_walker_skips_hidden_and_disabled() -> None:
     """The focusable-elements walk must exclude disabled inputs and
     hidden elements (offsetParent === null)."""
@@ -127,9 +110,7 @@ def test_js_focusable_walker_skips_hidden_and_disabled() -> None:
     assert "disabled" in block.lower()
     assert "offsetParent" in block
 
-
 # ─── ESC handler updated to read the new state ────────────────────────
-
 
 def test_esc_handler_uses_open_class_not_aria_hidden() -> None:
     """The Esc key handler used `getAttribute('aria-hidden') === 'false'`

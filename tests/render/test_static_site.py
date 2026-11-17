@@ -14,9 +14,6 @@ Covers:
 * ``--local-root`` makes the displayed path a build input, so two builds in
   different environments produce byte-identical output.
 * A built site references no script or stylesheet file over ``https://``.
-
-# @spec: 414-tests-render-mirror
-# #315
 """
 
 from __future__ import annotations
@@ -31,7 +28,7 @@ from pathlib import Path
 import pytest
 
 from llmwiki import build as build_mod
-from tests.render._paths import REPO_ROOT
+from tests._paths import REPO_ROOT
 
 # A `<link rel="stylesheet">` may still name a web-font *service* endpoint:
 # it serves @font-face rules, carries no file extension, and the site falls
@@ -43,9 +40,7 @@ _SCRIPT_SRC_RE = re.compile(r"<script[^>]+src=\"(https://[^\"]+)\"")
 _STYLESHEET_HREF_RE = re.compile(r"<link[^>]+href=\"(https://[^\"]+)\"")
 _ASSET_FILE_RE = re.compile(r"\.(?:js|css)\b")
 
-
 # ─── the server is gone ──────────────────────────────────────────────────
-
 
 def test_serve_cli_invocation_fails():
     """`llmwiki serve` is rejected by the CLI as an invalid subcommand."""
@@ -60,15 +55,12 @@ def test_serve_cli_invocation_fails():
     assert proc.returncode != 0
     assert "invalid choice" in proc.stderr
 
-
 @pytest.mark.parametrize("name", ["serve.sh", "serve.bat", "llmwiki/serve.py"])
 def test_serve_helpers_are_gone(name: str):
     """The server entry scripts and module no longer ship in the repo."""
     assert not (REPO_ROOT / name).exists(), f"{name} still ships"
 
-
 # ─── candidate review runs on the command line ───────────────────────────
-
 
 def _candidate(wiki: Path, kind: str, slug: str) -> Path:
     path = wiki / "candidates" / kind / f"{slug}.md"
@@ -79,7 +71,6 @@ def _candidate(wiki: Path, kind: str, slug: str) -> Path:
         encoding="utf-8",
     )
     return path
-
 
 def test_cli_apply_performs_promote_discard_and_merge(tmp_path: Path):
     # @regression
@@ -117,7 +108,6 @@ def test_cli_apply_performs_promote_discard_and_merge(tmp_path: Path):
     assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
     assert not (wiki / "candidates" / "entities" / "Dupe.md").exists()
 
-
 def test_apply_rebuilds_candidates_html_by_default(tmp_path: Path) -> None:
     """#109: after Apply, the static page must drop the rows that left the queue."""
     root = tmp_path / "vault"
@@ -148,7 +138,6 @@ def test_apply_rebuilds_candidates_html_by_default(tmp_path: Path) -> None:
     assert after.count('class="cand-decision"') == 0
     assert (wiki / "entities" / "Keep.md").is_file()
 
-
 def test_apply_no_rebuild_leaves_the_built_page_stale(tmp_path: Path) -> None:
     """`candidates apply --no-rebuild` executes the batch but leaves the built `candidates.html` byte-identical."""
     root = tmp_path / "vault"
@@ -178,7 +167,6 @@ def test_apply_no_rebuild_leaves_the_built_page_stale(tmp_path: Path) -> None:
     assert (site / "candidates.html").read_text(encoding="utf-8") == before
     assert (wiki / "entities" / "Keep.md").is_file()
 
-
 def test_the_built_candidates_page_reviews_without_a_backend(tmp_path: Path):
     # @regression
     """Decisions are DOM state; only executing them is a command-line step."""
@@ -202,9 +190,7 @@ def test_the_built_candidates_page_reviews_without_a_backend(tmp_path: Path):
     assert "XMLHttpRequest" not in page
     assert "/api/candidates" not in page
 
-
 # ─── the displayed local path is a build input ───────────────────────────
-
 
 def _seed_raw(root: Path) -> tuple[Path, Path]:
     raw = root / "raw"
@@ -236,14 +222,12 @@ print("hi")
     )
     return raw, sessions
 
-
 def _build(tmp_path: Path, name: str, home: str, local_root: str | None) -> Path:
     """Build a one-session vault under ``tmp_path/name`` and return its site."""
     root = tmp_path / name
     if not root.exists():
         _seed_raw(root)
     return _build_in(root, home, local_root)
-
 
 def _build_in(root: Path, home: str, local_root: str | None) -> Path:
     raw = root / "raw"
@@ -264,13 +248,11 @@ def _build_in(root: Path, home: str, local_root: str | None) -> Path:
     assert rc == 0
     return out
 
-
 def _html_bodies(site: Path) -> dict[str, str]:
     return {
         str(p.relative_to(site)): p.read_text(encoding="utf-8")
         for p in sorted(site.rglob("*.html"))
     }
-
 
 def test_local_root_makes_two_environments_produce_identical_output(tmp_path: Path):
     # @regression
@@ -286,7 +268,6 @@ def test_local_root_makes_two_environments_produce_identical_output(tmp_path: Pa
     assert not differing, f"pages differ between environments: {differing[:5]}"
     assert "/home/user/code/demo-proj" in pages_a["sessions/index.html"]
 
-
 def test_without_the_flag_two_environments_diverge(tmp_path: Path):
     """The flag is what makes the build reproducible, not luck."""
     root = tmp_path / "vault"
@@ -298,12 +279,10 @@ def test_without_the_flag_two_environments_diverge(tmp_path: Path):
     assert "/home/alice/code/demo-proj" in a
     assert "/Users/bob/code/demo-proj" in b
 
-
 def test_without_the_flag_the_path_follows_the_current_run(tmp_path: Path):
     """With no `--local-root`, the displayed cwd follows the home directory of the current build."""
     site = _build(tmp_path, "c", home="/home/alice", local_root=None)
     assert "/home/alice/code/demo-proj" in _html_bodies(site)["sessions/index.html"]
-
 
 def test_description_prose_is_never_rewritten(tmp_path: Path):
     # @regression
@@ -311,15 +290,12 @@ def test_description_prose_is_never_rewritten(tmp_path: Path):
     site = _build(tmp_path, "d", home="/home/alice", local_root="/home/user")
     assert "Look at /home/USER/code/demo-proj" in _html_bodies(site)["sessions/index.html"]
 
-
 # ─── nothing is fetched ──────────────────────────────────────────────────
-
 
 @pytest.fixture(scope="module")
 def built_site(tmp_path_factory) -> Path:
     tmp_path = tmp_path_factory.mktemp("nofetch")
     return _build(tmp_path, "site", home="/home/alice", local_root="/home/user")
-
 
 def test_no_https_script_or_stylesheet_file(built_site: Path):
     # @regression
@@ -333,7 +309,6 @@ def test_no_https_script_or_stylesheet_file(built_site: Path):
         offenders += [f"{name}: {u}" for u in urls if _ASSET_FILE_RE.search(u)]
     assert not offenders, f"remote script/stylesheet files: {offenders[:5]}"
 
-
 def test_no_https_script_tags_at_all(built_site: Path):
     """No built page loads any `<script src="https://…">`, whatever its file extension."""
     # @regression
@@ -343,7 +318,6 @@ def test_no_https_script_tags_at_all(built_site: Path):
         for url in _SCRIPT_SRC_RE.findall(body)
     ]
     assert not offenders, f"remote <script src>: {offenders[:5]}"
-
 
 def test_only_the_web_font_service_is_linked_over_https(built_site: Path):
     """Guards the one remaining remote `<link>`: a font service whose
@@ -356,14 +330,12 @@ def test_only_the_web_font_service_is_linked_over_https(built_site: Path):
     }
     assert hosts <= _FONT_SERVICE_HOSTS, f"unexpected remote stylesheet hosts: {hosts}"
 
-
 def test_pages_load_their_data_through_a_script_tag(built_site: Path):
     # @regression
     """`file://` blocks fetch of a same-origin JSON; a <script> src works."""
     index = (built_site / "index.html").read_text(encoding="utf-8")
     assert 'src="llmwiki-state.js"' in index
     assert 'type="module"' not in index
-
 
 def test_no_page_issues_a_same_origin_fetch(built_site: Path):
     """No built page contains a same-origin `fetch("/…")`, which `file://` blocks."""

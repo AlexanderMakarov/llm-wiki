@@ -17,9 +17,6 @@ These tests pin the contract:
 
 #454 (merged from the former ``test_filter_slug_label``): every control in the
 filter bar is wrapped in a ``<label>`` so screen readers announce it.
-
-# @spec: 414-tests-render-mirror
-# #315
 """
 from __future__ import annotations
 
@@ -45,7 +42,6 @@ def _src(slug: str, date: str, project: str = "demo", title: str | None = None):
     fname = f"{date}T00-00-{project}-{slug}.md"
     return (Path("raw/sessions") / fname, fm, "body")
 
-
 def _row_for_slug(html_text: str, slug: str) -> str:
     m = re.search(
         r'<tr data-project="[^"]*"(?: data-agent="[^"]*")? data-model="[^"]*" data-date="[^"]*" data-slug="'
@@ -57,7 +53,6 @@ def _row_for_slug(html_text: str, slug: str) -> str:
     assert m, f"row for slug {slug!r} not found in rendered html"
     return m.group(0)
 
-
 def _link_text(td_html: str) -> str:
     """Extract just the link's anchor text from a `<td><a …>TEXT</a></td>` cell.
 
@@ -67,7 +62,6 @@ def _link_text(td_html: str) -> str:
     """
     m = re.search(r"<a[^>]*>(.*?)</a>", td_html, re.DOTALL)
     return m.group(1) if m else td_html
-
 
 def test_session_cell_no_longer_contains_date(tmp_path: Path) -> None:
     """The Session cell shows only the slug while the Date column keeps the date."""
@@ -87,7 +81,6 @@ def test_session_cell_no_longer_contains_date(tmp_path: Path) -> None:
     )
     assert "2026-04-01" in date_cell, "Date column lost the date string"
 
-
 def test_custom_title_without_date_suffix_preserved(tmp_path: Path) -> None:
     """If somebody hand-edits a session frontmatter title to something
     that doesn't follow the auto-generated `" — <date>"` shape, the
@@ -100,7 +93,6 @@ def test_custom_title_without_date_suffix_preserved(tmp_path: Path) -> None:
     session_cell = re.findall(r"<td.*?>(.*?)</td>", row, re.DOTALL)[0]
     assert "My Custom Session Title" in session_cell
 
-
 def test_session_prefix_still_stripped(tmp_path: Path) -> None:
     """The pre-existing "Session: " prefix-strip must continue to work
     after the new date-suffix-strip lands on top of it."""
@@ -111,7 +103,6 @@ def test_session_prefix_still_stripped(tmp_path: Path) -> None:
     row = _row_for_slug(html_text, "with-prefix")
     session_cell = re.findall(r"<td.*?>(.*?)</td>", row, re.DOTALL)[0]
     assert "Session:" not in session_cell
-
 
 def test_colgroup_present_for_sticky_header_alignment(tmp_path: Path) -> None:
     """Pin the markup contract for sticky-header alignment fix — a
@@ -124,7 +115,6 @@ def test_colgroup_present_for_sticky_header_alignment(tmp_path: Path) -> None:
     # The CSS rule that makes colgroup widths binding must be present.
     assert "table-layout: fixed" in CSS
     assert ".sessions-table" in CSS
-
 
 def test_date_column_wide_enough_for_full_iso_date(tmp_path: Path) -> None:
     """Date col must show YYYY-MM-DD in full — not ``2026-07-…``.
@@ -174,15 +164,12 @@ def test_sticky_thead_uses_nav_offset_without_overflow_scrollport() -> None:
         re.DOTALL,
     )
 
-
 # ─── Filter-bar labels (#454) ─────────────────────────────────────────
-
 
 def _render_filter_bar(tmp_path: Path) -> str:
     sources = [_src("a", "2026-04-01"), _src("b", "2026-04-02")]
     out = render_sessions_index(sources, {"demo": sources}, tmp_path)
     return out.read_text(encoding="utf-8")
-
 
 def test_slug_input_wrapped_in_label(tmp_path: Path) -> None:
     """The slug filter input sits inside a `<label>Slug …</label>` so screen readers announce it."""
@@ -196,7 +183,6 @@ def test_slug_input_wrapped_in_label(tmp_path: Path) -> None:
         "filter-text input must be wrapped in a `<label>Slug ...</label>` "
         "so screen readers announce it consistently with the other filters"
     )
-
 
 def test_all_filters_have_labels(tmp_path: Path) -> None:
     """Project, Agent, Model, From, To, and Slug all need a `<label>` wrapper."""
@@ -213,7 +199,6 @@ def test_all_filters_have_labels(tmp_path: Path) -> None:
         assert m, f"{control_id} not in rendered html"
         prefix = html_text[max(0, m.start() - 200) : m.start()]
         assert "<label>" in prefix, f"{control_id} not wrapped in label"
-
 
 def test_agent_filter_and_data_attr(tmp_path: Path) -> None:
     """The sessions index offers an agent filter and tags each row with `data-agent`."""

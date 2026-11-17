@@ -10,9 +10,6 @@ be patched here — it is the reference.
 The second half covers presentation, which has one rule the parity tests
 cannot express: both groups always render, and a wiki page with no reader page
 is listed without becoming clickable.
-
-# @spec: 414-tests-render-mirror
-# #315
 """
 
 from __future__ import annotations
@@ -28,7 +25,7 @@ from llmwiki.build import WIKI_CORPUS_MANIFEST_KEY, build_wiki_corpus_entries
 from llmwiki.render.js import JS
 from llmwiki.search.corpus import ScannedPage
 from llmwiki.search.engine import DEFAULT_HIT_CAP, DEFAULT_PAGE_CAP, search_match
-from tests.render._paths import REPO_ROOT
+from tests._paths import REPO_ROOT
 
 DEMO_WIKI = REPO_ROOT / "demo" / "wiki"
 
@@ -61,9 +58,7 @@ if (input.op === "match") {
 }
 """
 
-
 # ── harness ───────────────────────────────────────────────────────────────
-
 
 def _matcher_source() -> str:
     """The marked, DOM-free region of the viewer JS, verbatim.
@@ -74,7 +69,6 @@ def _matcher_source() -> str:
     start = JS.index(_BEGIN)
     end = JS.index(_END)
     return JS[start:end]
-
 
 @pytest.fixture(scope="module")
 def node_runner(tmp_path_factory: pytest.TempPathFactory):
@@ -104,7 +98,6 @@ def node_runner(tmp_path_factory: pytest.TempPathFactory):
 
     return run
 
-
 def _scanned(entry: dict) -> ScannedPage:
     """The corpus payload as the engine's own input type.
 
@@ -123,7 +116,6 @@ def _scanned(entry: dict) -> ScannedPage:
         is_raw=False,
     )
 
-
 def _python_match(corpus: list[dict], term: str, kind: str = "") -> dict:
     result = search_match([_scanned(e) for e in corpus], [term], kind=kind)[term]
     return {
@@ -134,7 +126,6 @@ def _python_match(corpus: list[dict], term: str, kind: str = "") -> dict:
         "truncated": result.truncated,
     }
 
-
 def _assert_parity(node_runner, corpus: list[dict], terms: list[str], kind: str = "") -> dict:
     """Run both implementations over one corpus and assert they agree."""
     js = node_runner({"op": "match", "corpus": corpus, "terms": terms, "kind": kind})
@@ -142,13 +133,10 @@ def _assert_parity(node_runner, corpus: list[dict], terms: list[str], kind: str 
         assert js[term] == _python_match(corpus, term, kind), f"parity broke on {term!r}"
     return js
 
-
 # ── corpora ───────────────────────────────────────────────────────────────
-
 
 def _page(path: str, title: str, text: str, kind: str = "source", url: str | None = None) -> dict:
     return {"path": path, "title": title, "url": url, "kind": kind, "text": text}
-
 
 @pytest.fixture(scope="module")
 def corpus() -> list[dict]:
@@ -211,16 +199,13 @@ def corpus() -> list[dict]:
         ),
     ]
 
-
 # ── parity with llmwiki.search.engine.search_match ─────────────────────────
-
 
 def test_a_title_and_path_match_is_returned_without_a_body_hit(node_runner, corpus):
     """# @spec: 248-wiki-site-search-corpus @regression"""
     js = _assert_parity(node_runner, corpus, ["hazel"])
     assert [p["path"] for p in js["hazel"]["pages"]] == ["wiki/entities/Hazel.md"]
     assert js["hazel"]["pages"][0]["lines"] == []
-
 
 def test_a_body_only_match_is_returned_with_its_lines(node_runner, corpus):
     """# @spec: 248-wiki-site-search-corpus @regression"""
@@ -231,7 +216,6 @@ def test_a_body_only_match_is_returned_with_its_lines(node_runner, corpus):
     ]
     assert all(not p["name_match"] for p in js["zanzibarine"]["pages"])
     assert len(js["zanzibarine"]["pages"][1]["lines"]) == 2
-
 
 def test_name_matches_sort_ahead_of_body_matches(node_runner, corpus):
     """The ordering rule, proven against a term that does both.
@@ -247,7 +231,6 @@ def test_name_matches_sort_ahead_of_body_matches(node_runner, corpus):
         "wiki/concepts/Batching.md",
     ]
 
-
 def test_a_multi_word_term_is_one_literal_substring(node_runner, corpus):
     """Both words appear; the phrase does not, so nothing matches.
 
@@ -260,7 +243,6 @@ def test_a_multi_word_term_is_one_literal_substring(node_runner, corpus):
     assert js["pagination cursors"]["pages"] == []
     assert [p["path"] for p in js["pagination"]["pages"]] == ["wiki/sources/2026-02-02-beta.md"]
 
-
 def test_case_folding_holds_outside_ascii(node_runner, corpus):
     """Cyrillic, lowercased on both sides — the one non-ASCII risk left once
     tokenisation is out of the picture.
@@ -271,7 +253,6 @@ def test_case_folding_holds_outside_ascii(node_runner, corpus):
     assert js["кириллица"]["pages"][0]["name_match"] is True
     assert [p["path"] for p in js["кодировку"]["pages"]] == ["wiki/concepts/Кириллица.md"]
     assert js["КОДИРОВКУ"] == js["кодировку"]
-
 
 def test_the_page_cap_drops_matches_and_says_so(node_runner):
     """# @spec: 248-wiki-site-search-corpus @regression"""
@@ -285,7 +266,6 @@ def test_the_page_cap_drops_matches_and_says_so(node_runner):
     assert js["widget"]["pages"][-1]["path"] == "wiki/sources/0199-widget.md"
     assert js["widget"]["truncated"] is True
 
-
 def test_the_hit_cap_drops_lines_and_says_so(node_runner):
     """# @spec: 248-wiki-site-search-corpus @regression"""
     body = "\n".join(f"widget line {i}" for i in range(DEFAULT_HIT_CAP + 50))
@@ -293,12 +273,10 @@ def test_the_hit_cap_drops_lines_and_says_so(node_runner):
     assert sum(len(p["lines"]) for p in js["widget"]["pages"]) == DEFAULT_HIT_CAP
     assert js["widget"]["truncated"] is True
 
-
 def test_the_kind_filter_is_mcps_frontmatter_type_filter(node_runner, corpus):
     """# @spec: 248-wiki-site-search-corpus @regression"""
     js = _assert_parity(node_runner, corpus, ["cadence"], kind="entity")
     assert [p["path"] for p in js["cadence"]["pages"]] == ["wiki/entities/Cadence.md"]
-
 
 def _site_entries(count: int, *, type_: str = "session") -> list[dict]:
     return [
@@ -313,14 +291,12 @@ def _site_entries(count: int, *, type_: str = "session") -> list[dict]:
         for i in range(count)
     ]
 
-
 def test_empty_site_query_is_only_a_ten_row_browse_preview(node_runner):
     """No input is not a request for all results; it is the compact preview."""
     result = node_runner({"op": "site", "entries": _site_entries(250), "query": ""})
     assert len(result["rows"]) == 10
     assert result["truncated"] is False
     assert result["truncationMessage"] is None
-
 
 def test_filter_only_site_query_returns_up_to_the_normal_search_cap(node_runner):
     """# @spec: 248-wiki-site-search-corpus @regression"""
@@ -332,7 +308,6 @@ def test_filter_only_site_query_returns_up_to_the_normal_search_cap(node_runner)
     assert result["truncated"] is True
     assert result["truncationMessage"] == "Showing 200 of 250 matching results."
 
-
 def test_sort_only_site_query_returns_the_newest_two_hundred(node_runner):
     """``sort:date`` is explicit too; it no longer has a separate 20-row cap."""
     entries = _site_entries(250)
@@ -342,13 +317,11 @@ def test_sort_only_site_query_returns_the_newest_two_hundred(node_runner):
     dates = [row["date"] for row in result["rows"]]
     assert dates == sorted(dates, reverse=True)
 
-
 def test_common_site_text_is_still_capped_at_two_hundred(node_runner):
     """Short/common terms cannot make the palette return an unbounded list."""
     result = node_runner({"op": "site", "entries": _site_entries(250), "query": "widget"})
     assert len(result["rows"]) == DEFAULT_PAGE_CAP
     assert result["truncated"] is True
-
 
 def test_incomplete_corpus_status_has_a_visible_specific_warning(node_runner):
     """An incomplete wiki-corpus status produces a warning naming the exhausted budget and the count of oversize pages."""
@@ -358,7 +331,6 @@ def test_incomplete_corpus_status_has_a_visible_specific_warning(node_runner):
     })
     assert "50 MiB" in message
     assert "2 pages over 4 MiB" in message
-
 
 @pytest.mark.skipif(not DEMO_WIKI.is_dir(), reason="demo vault not checked out")
 @pytest.mark.parametrize(
@@ -372,9 +344,7 @@ def test_parity_over_the_committed_demo_vault(node_runner, term):
     """
     _assert_parity(node_runner, build_wiki_corpus_entries(DEMO_WIKI), [term])
 
-
 # ── presentation ──────────────────────────────────────────────────────────
-
 
 def _view(*, wiki: dict | None = None, site: dict | None = None, term: str = "") -> dict:
     base = {"rows": [], "truncated": False, "message": None, "messageKind": "info"}
@@ -384,11 +354,9 @@ def _view(*, wiki: dict | None = None, site: dict | None = None, term: str = "")
         "site": {**base, "id": "site", "label": "Site", **(site or {})},
     }
 
-
 def _wiki_row(entry: dict, *, name_match: bool = True, lines: list | None = None) -> dict:
     return {"page": entry, "path": entry["path"], "title": entry["title"],
             "nameMatch": name_match, "lines": lines or []}
-
 
 def test_both_groups_render_when_only_one_has_hits(node_runner, corpus):
     """The point of the two-group layout: a reader can tell "nothing in the
@@ -405,7 +373,6 @@ def test_both_groups_render_when_only_one_has_hits(node_runner, corpus):
     assert 'data-group-message="site"' in built["html"]
     assert "No site page contains" in built["html"]
 
-
 def test_an_empty_wiki_group_keeps_its_heading(node_runner):
     """# @spec: 248-wiki-site-search-corpus @regression"""
     built = node_runner({"op": "html", "view": _view(
@@ -415,7 +382,6 @@ def test_an_empty_wiki_group_keeps_its_heading(node_runner):
     assert 'data-group="wiki"' in built["html"]
     assert 'data-group-message="wiki"' in built["html"]
     assert "0 results" in built["html"]
-
 
 def test_a_page_with_no_reader_page_is_listed_but_not_clickable(node_runner, corpus):
     """Full MCP coverage without dead-end navigation: the row is inert, not an
@@ -440,13 +406,11 @@ def test_a_page_with_no_reader_page_is_listed_but_not_clickable(node_runner, cor
     assert [o["url"] for o in built["openable"]] == ["topics/hazel.html"]
     assert 'data-i="0"' in built["html"]
 
-
 def test_a_capped_group_says_that_matches_were_dropped(node_runner):
     """# @spec: 248-wiki-site-search-corpus @regression"""
     built = node_runner({"op": "html", "view": _view(wiki={"truncated": True})})
     assert 'data-group-truncated="wiki"' in built["html"]
     assert str(DEFAULT_PAGE_CAP) in built["html"]
-
 
 def test_a_failed_corpus_renders_the_error_row_not_an_empty_list(node_runner):
     """CONTRIBUTING rule 9 in the browser: the group says it is broken.
@@ -460,7 +424,6 @@ def test_a_failed_corpus_renders_the_error_row_not_an_empty_list(node_runner):
     assert "palette-note" in built["html"]
     assert built["openable"] == []
 
-
 # ── highlighting (FR7) ────────────────────────────────────────────────────
 #
 # Presentation only: `view.term` reaches the renderer, never the matcher, so
@@ -468,13 +431,11 @@ def test_a_failed_corpus_renders_the_error_row_not_an_empty_list(node_runner):
 # itself — every occurrence, original casing, and escaping that holds when
 # the term matches inside markup the page happens to contain.
 
-
 def _row_for(html: str, needle: str) -> str:
     """The one ``palette-row`` fragment that mentions ``needle``."""
     rows = [r for r in html.split('<li class="palette-row') if needle in r]
     assert len(rows) == 1, f"expected one row mentioning {needle!r}, got {len(rows)}"
     return rows[0]
-
 
 def test_every_occurrence_in_a_line_is_marked(node_runner, corpus):
     """One line usually carries the term more than once.
@@ -485,7 +446,6 @@ def test_every_occurrence_in_a_line_is_marked(node_runner, corpus):
                     lines=[[4, "widget beside widget beside widget"]])
     built = node_runner({"op": "html", "view": _view(wiki={"rows": [row]}, term="widget")})
     assert built["html"].count("<mark>widget</mark>") == 3
-
 
 def test_a_hit_late_in_a_line_is_windowed_into_view(node_runner, corpus):
     """The match must not exist only beyond the row's clipped right edge.
@@ -502,7 +462,6 @@ def test_a_hit_late_in_a_line_is_windowed_into_view(node_runner, corpus):
     assert ('result-line-no">20</span>…' + "x" * 24 +
             "<mark>Obsidian</mark>") in built["html"]
 
-
 def test_a_case_insensitive_match_keeps_the_pages_own_casing(node_runner, corpus):
     """Matching folds case; the reader still sees what the page wrote.
 
@@ -515,7 +474,6 @@ def test_a_case_insensitive_match_keeps_the_pages_own_casing(node_runner, corpus
     assert "<mark>Widget</mark>" in html
     assert "<mark>WIDGET</mark>" in html
     assert "<mark>widget</mark>" in html
-
 
 def test_markup_in_a_line_is_escaped_even_when_the_term_matches_inside_it(
     node_runner, corpus
@@ -540,7 +498,6 @@ def test_markup_in_a_line_is_escaped_even_when_the_term_matches_inside_it(
     assert "<script" not in between_tags
     assert "&lt;script&gt;<mark>alert</mark>(1)&lt;/script&gt;" in between_tags
 
-
 def test_the_title_and_the_path_are_highlighted_too(node_runner, corpus):
     """A name match is ``term in title`` OR ``term in path``, so both carry
     the mark — otherwise a path-only hit reads as unexplained.
@@ -552,7 +509,6 @@ def test_the_title_and_the_path_are_highlighted_too(node_runner, corpus):
     row = _row_for(built["html"], "wiki/entities/")
     assert '<span class="result-title"><mark>Hazel</mark></span>' in row
     assert 'wiki/entities/<mark>Hazel</mark>.md' in row
-
 
 def test_site_rows_are_marked_the_same_way(node_runner):
     """Both groups read alike — the SITE group marks its title and meta.
@@ -566,7 +522,6 @@ def test_site_rows_are_marked_the_same_way(node_runner):
     row = _row_for(built["html"], "notes")
     assert '<span class="result-title"><mark>Widget</mark> notes</span>' in row
     assert "<mark>widget</mark>-app" in row
-
 
 def test_a_site_row_is_not_repeated_when_wiki_opens_the_same_page(node_runner):
     """Two searchable records may share one reader destination; show it once.
@@ -590,7 +545,6 @@ def test_a_site_row_is_not_repeated_when_wiki_opens_the_same_page(node_runner):
     assert built["openable"] == [{"type": "wiki", "url": url,
                                   "title": "Deploying to GitLab Pages"}]
 
-
 def test_a_term_that_matches_nothing_renders_exactly_the_escaped_text(node_runner, corpus):
     """No hit, no markup change: the row is byte-identical to the unmarked one.
 
@@ -603,9 +557,7 @@ def test_a_term_that_matches_nothing_renders_exactly_the_escaped_text(node_runne
     assert "<mark>" not in marked["html"]
     assert "a &amp; b &lt; c" in marked["html"]
 
-
 # ── the viewer and the build agree on the manifest ────────────────────────
-
 
 def test_the_viewer_reads_the_manifest_key_the_build_writes():
     """Drift between these two is invisible until the WIKI group is empty.
@@ -614,14 +566,12 @@ def test_the_viewer_reads_the_manifest_key_the_build_writes():
     """
     assert f'"{WIKI_CORPUS_MANIFEST_KEY}"' in JS
 
-
 def test_a_site_without_the_manifest_key_reports_rather_than_goes_quiet():
     """A pre-#248 site has no key. The loader must survive that *and* say so."""
     marker = "function noteMissingWikiCorpus()"
     body = JS[JS.index(marker):JS.index("function loadWikiCorpus(")]
     assert "__llmwikiReportError" in body
     assert "wikiCorpusFailed = true" in body
-
 
 def test_the_matcher_block_stays_dom_free():
     """The parity tests run it under node; a `document` reference would make

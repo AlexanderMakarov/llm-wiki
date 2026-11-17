@@ -1,7 +1,4 @@
 """Shared collapse_section widget used by Home + Analytics.
-
-# @spec: 414-tests-render-mirror
-# #315
 """
 
 from __future__ import annotations
@@ -23,7 +20,6 @@ def test_collapse_section_escapes_title_and_shows_count():
     assert "<p>body</p>" in html
     assert " open" not in html
 
-
 def test_collapse_section_open_and_list_helpers():
     """The `open` flag, list helper (with intro, footer and count) and wrapper compose into the expected collapse markup."""
     opened = collapse_section("T", 0, "x", open=True)
@@ -42,7 +38,6 @@ def test_collapse_section_open_and_list_helpers():
     wrap = collapse_sections_wrap(listed, collapse_section("Other", 1, "y"))
     assert wrap.startswith('<div class="collapse-sections">')
     assert wrap.count("collapse-section") >= 2
-
 
 def test_analytics_dead_stock_uses_collapse_section():
     """The Analytics dead-stock list renders inside the shared collapse section, with its count and every listed page."""

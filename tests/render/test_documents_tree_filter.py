@@ -4,9 +4,6 @@ Lifts the DOM-free ``LLMWIKI_DOCTREE_FILTER`` block from
 ``llmwiki/render/js.py`` and runs it under ``node`` — same harness pattern as
 ``test_palette_match.py``. Covers starts-with-then-contains order, ancestor
 retention, substring highlight, and the empty-state copy.
-
-# @spec: 414-tests-render-mirror
-# #315
 """
 
 from __future__ import annotations
@@ -112,12 +109,10 @@ _SAMPLE_TREE = {
     ],
 }
 
-
 def _filter_source() -> str:
     start = JS.index(_BEGIN)
     end = JS.index(_END)
     return JS[start:end]
-
 
 @pytest.fixture(scope="module")
 def node_runner(tmp_path_factory: pytest.TempPathFactory):
@@ -147,18 +142,15 @@ def node_runner(tmp_path_factory: pytest.TempPathFactory):
 
     return run
 
-
 def test_empty_copy_exact(node_runner) -> None:
     """The documents-tree filter's empty state reads exactly `No documents match`."""
     assert node_runner({"op": "emptyCopy"}) == "No documents match"
-
 
 def test_match_kind_starts_contains_none(node_runner) -> None:
     """`matchKind` classifies a label as a starts-with, contains-only or non-match for the query."""
     assert node_runner({"op": "matchKind", "label": "Alpha Plan", "queryLower": "alpha"}) == "starts"
     assert node_runner({"op": "matchKind", "label": "xAlpha", "queryLower": "alpha"}) == "contains"
     assert node_runner({"op": "matchKind", "label": "Beta", "queryLower": "alpha"}) is None
-
 
 def test_filter_order_starts_before_contains(node_runner) -> None:
     """Root files: starts-with match before contains-only when sorted."""
@@ -177,7 +169,6 @@ def test_filter_order_starts_before_contains(node_runner) -> None:
     labels = [f["label"] for f in out["files"]]
     assert labels == ["Alpha early", "Alpha again", "xAlpha late", "something Alpha mid"]
 
-
 def test_filter_keeps_ancestors_hides_non_matches(node_runner) -> None:
     """Filtering keeps only the folder path to a matching file and drops non-matching siblings and folders."""
     out = node_runner({"op": "filter", "tree": _SAMPLE_TREE, "queryLower": "alpha plan"})
@@ -189,7 +180,6 @@ def test_filter_keeps_ancestors_hides_non_matches(node_runner) -> None:
     deep = notes["folders"][0]
     assert [f["label"] for f in deep["files"]] == ["Alpha Plan"]
     assert out["files"] == []  # root Alpha root starts with "alpha" but not "alpha plan"
-
 
 def test_filter_ancestor_of_nested_contains(node_runner) -> None:
     """A short query keeps every folder that holds a match, at any depth, and drops folders with none."""
@@ -204,14 +194,12 @@ def test_filter_ancestor_of_nested_contains(node_runner) -> None:
     root_labels = [f["label"] for f in out["files"]]
     assert root_labels == ["Alpha root"]  # starts-with; Gamma dropped
 
-
 def test_highlight_wraps_substring(node_runner) -> None:
     """Every case-insensitive occurrence of the query in a label is wrapped in a highlight `<mark>`."""
     html = node_runner({"op": "highlight", "label": "Alpha Plan", "queryLower": "pha"})
     assert html == 'Al<mark class="doctree-filter-hit">pha</mark> Plan'
     multi = node_runner({"op": "highlight", "label": "aa AA", "queryLower": "a"})
     assert multi.count('class="doctree-filter-hit"') == 4
-
 
 def test_render_opens_ancestors_and_highlights(node_runner) -> None:
     """The filtered render forces matching ancestor folders open, highlights hits and omits non-matches."""
@@ -234,7 +222,6 @@ def test_render_opens_ancestors_and_highlights(node_runner) -> None:
     assert "xalpha.html" in html
     assert "Other" not in html
 
-
 def test_render_empty_returns_null(node_runner) -> None:
     """A query matching nothing renders `null` so the caller can show the empty state."""
     assert (
@@ -248,19 +235,16 @@ def test_render_empty_returns_null(node_runner) -> None:
         is None
     )
 
-
 def test_css_has_filter_and_mark_rules() -> None:
     """The stylesheet styles the tree filter input and its highlight mark."""
     assert ".doctree-filter" in CSS
     assert ".doctree-filter-hit" in CSS
-
 
 def test_js_ships_filter_input_wiring() -> None:
     """The viewer script builds the filter input and ships the empty-state and highlight hooks."""
     assert 'className = "doctree-filter"' in JS
     assert "No documents match" in JS
     assert "doctree-filter-hit" in JS
-
 
 def test_site_only_filters_hide_wiki_group_message_in_script() -> None:
     """#305: type:/project:/… must not leave Wiki free-text matching on."""
