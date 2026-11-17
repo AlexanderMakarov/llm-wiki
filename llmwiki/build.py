@@ -203,7 +203,7 @@ PROJECTS_META_DIR = REPO_ROOT / "wiki" / "projects"
 # handling, simpler list parser) which silently dropped frontmatter on
 # Windows-authored files. Unified to the canonical parser in
 # `_frontmatter.py`. Re-exported under the historical name so external
-# consumers (and `tests/test_render_split.py`) keep working.
+# consumers (and `tests/render/test_split.py`) keep working.
 from llmwiki._frontmatter import (  # noqa: E402
     parse_frontmatter,
 )

@@ -34,7 +34,6 @@ def _session_src(body: str = "## One\n\nx\n\n## Two\n\ny\n\n## Three\n\nz\n"):
     path = Path("raw/sessions/2026-07-20T12-00-demo-proj-abc12345.md")
     return path, meta, body
 
-
 def test_session_html_toc_mount_inside_doctree_section(tmp_path: Path) -> None:
     """TOC aside lives under section.doctree-section, after hero, not on body."""
     path, meta, body = _session_src()
@@ -54,7 +53,6 @@ def test_session_html_toc_mount_inside_doctree_section(tmp_path: Path) -> None:
     # Mount precedes article content inside the grid.
     main_idx = html.find('class="doctree-main"')
     assert mount_idx < main_idx
-
 
 def test_session_description_lives_inside_hero(tmp_path: Path) -> None:
     """#229/#471: description is inside ``.hero .container``, not a sibling after it.
@@ -79,7 +77,6 @@ def test_session_description_lives_inside_hero(tmp_path: Path) -> None:
     assert "session-description" not in after_hero
     assert ".hero .session-description" in CSS
 
-
 def test_session_toc_js_mounts_into_data_toc_mount_not_body() -> None:
     """Regression: old code appended a fixed .toc-sidebar to document.body."""
     toc_block = re.search(
@@ -95,7 +92,6 @@ def test_session_toc_js_mounts_into_data_toc_mount_not_body() -> None:
     # Short sessions (Conversation + one Turn) only have 2 headings.
     assert "headings.length < 2" in block
     assert "headings.length < 3" not in block
-
 
 def test_session_toc_css_sticky_in_doctree_grid() -> None:
     """TOC uses sticky positioning inside session-toc-layout, not body-fixed."""

@@ -53,7 +53,6 @@ def _write_doc(root: Path, rel: str, title: str, date: str,
     )
     return p
 
-
 @pytest.fixture
 def docs_dir(tmp_path: Path) -> Path:
     """raw/docs with one root doc + one 3-chunk doc folder."""
@@ -66,8 +65,8 @@ def docs_dir(tmp_path: Path) -> Path:
         )
     return d
 
-
 def test_scan_finds_all_files_sorted(docs_dir: Path):
+    """`scan_raw_docs` returns every raw document under the docs folder in sorted order."""
     files = scan_raw_docs(docs_dir)
     assert [f.rel.as_posix() for f in files] == [
         "runbook/runbook-01.md",
@@ -76,8 +75,8 @@ def test_scan_finds_all_files_sorted(docs_dir: Path):
         "standalone.md",
     ]
 
-
 def test_scan_skips_context_and_unsafe_files(docs_dir: Path):
+    """`scan_raw_docs` ignores `_context.md` and files under directories with unsafe names."""
     (docs_dir / "_context.md").write_text("folder meta", encoding="utf-8")
     evil = docs_dir / "a b"
     evil.mkdir()
@@ -86,15 +85,14 @@ def test_scan_skips_context_and_unsafe_files(docs_dir: Path):
     assert "_context.md" not in rels
     assert not any(r.startswith("a b/") for r in rels)
 
-
 def test_scan_missing_dir_is_empty(tmp_path: Path):
+    """`scan_raw_docs` returns an empty list when the docs folder does not exist."""
     assert scan_raw_docs(tmp_path / "nope") == []
 
-
 def test_clean_chunk_title_strips_part_suffix():
+    """`clean_chunk_title` removes the `(part N/M: …)` suffix and leaves plain titles untouched."""
     assert clean_chunk_title("VPS Runbook (part 1/11: Intro)") == "VPS Runbook"
     assert clean_chunk_title("Plain Title") == "Plain Title"
-
 
 def test_group_documents_single_file_root(docs_dir: Path):
     """Root-level lone file is one logical document with canonical flat URL."""
@@ -105,7 +103,6 @@ def test_group_documents_single_file_root(docs_dir: Path):
     assert standalone.url == "documents/standalone.html"
     assert standalone.folder_parts == ()
     assert [f.rel.as_posix() for f in standalone.part_files] == ["standalone.md"]
-
 
 def test_group_documents_multi_chunk_default_layout(docs_dir: Path):
     """Default add_doc layout: raw/docs/<slug>/<slug>-NN.md → one logical doc."""
@@ -120,7 +117,6 @@ def test_group_documents_multi_chunk_default_layout(docs_dir: Path):
     assert [f.rel.stem for f in runbook.part_files] == [
         "runbook-01", "runbook-02", "runbook-03",
     ]
-
 
 def test_group_documents_two_docs_under_project_folder(tmp_path: Path):
     """--project folder with two distinct docs must not collapse into one (#305)."""
@@ -147,8 +143,8 @@ def test_group_documents_two_docs_under_project_folder(tmp_path: Path):
     assert beta.parts == 1
     assert beta.url == "documents/acme/beta-notes.html"
 
-
 def test_group_documents_cleaned_titles(tmp_path: Path):
+    """Multi-part chunks group into one document entry with a part-free title."""
     d = tmp_path / "raw" / "docs"
     _write_doc(
         d, "guide/guide-01.md",
@@ -163,15 +159,15 @@ def test_group_documents_cleaned_titles(tmp_path: Path):
     assert entries[0].title == "Deploy Guide"
     assert "(" not in entries[0].title
 
-
 def test_base_slug_from_stem():
+    """`base_slug_from_stem` strips a zero-padded chunk index but keeps an unpadded collision suffix."""
     assert base_slug_from_stem("runbook-01") == "runbook"
     assert base_slug_from_stem("runbook") == "runbook"
     # Collision suffix from add_doc._dedupe is unpadded — not a chunk index.
     assert base_slug_from_stem("runbook-2") == "runbook-2"
 
-
 def test_sidebar_marks_active_and_opens_folder(docs_dir: Path):
+    """The sidebar marks the active document and opens its folder with correct relative links."""
     files = scan_raw_docs(docs_dir)
     root = build_tree(files)
     active = files[1]  # runbook-02
@@ -179,7 +175,6 @@ def test_sidebar_marks_active_and_opens_folder(docs_dir: Path):
     assert "<details open>" in html_text
     assert 'class="active"' in html_text
     assert 'href="../../documents/runbook/runbook-02.html"' in html_text
-
 
 def test_tree_to_dict_and_write_documents_tree(docs_dir: Path, tmp_path: Path):
     """Tree leaves are logical docs — one leaf for a multi-part runbook (#305)."""
@@ -208,8 +203,8 @@ def test_tree_to_dict_and_write_documents_tree(docs_dir: Path, tmp_path: Path):
     loaded = __import__("json").loads(path.read_text(encoding="utf-8"))
     assert loaded == data
 
-
 def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path):
+    """Document pages mount the shared tree client-side instead of inlining it, and ship the sibling `.md` copies."""
     out = tmp_path / "site"
     files = scan_raw_docs(docs_dir)
     root = build_tree(files)
@@ -240,7 +235,6 @@ def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path
     assert "data-doctree-js" in mount
     assert "documents-tree.js" in mount
 
-
 def test_strip_part_chrome_removes_degenerate_empty_bold_breadcrumb():
     """Older chunks sometimes have ``> Part i of N of ****.`` (empty title)."""
     body = "> Part 3 of 4 of ****.\n\n## Experience\n\nDid things.\n"
@@ -253,8 +247,8 @@ def test_strip_part_chrome_removes_degenerate_empty_bold_breadcrumb():
     assert "****" not in out
     assert "## Experience" in out
 
-
 def test_strip_part_chrome_removes_breadcrumb_and_title_h1():
+    """`strip_part_chrome` drops a chunk's breadcrumb line and title heading and keeps its body."""
     body = (
         "> Part 1 of 3 of **VPS Runbook** — Intro.\n\n"
         "# VPS Runbook (part 1/3: Intro)\n\n"
@@ -268,7 +262,6 @@ def test_strip_part_chrome_removes_breadcrumb_and_title_h1():
     assert "Part 1 of" not in out
     assert "VPS Runbook (part 1/3: Intro)" not in out
     assert "Real section body." in out
-
 
 def test_unified_page_assembles_parts_and_stubs_redirect(docs_dir: Path, tmp_path: Path):
     """Multi-part vault → one canonical HTML; part URLs are stubs (#305 Slice 2)."""
@@ -322,8 +315,8 @@ def test_unified_page_assembles_parts_and_stubs_redirect(docs_dir: Path, tmp_pat
     # Single-file docs have no -NN stub sibling.
     assert not (out / "documents" / "standalone-01.html").exists()
 
-
 def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):
+    """The Home page renders the pipeline state widget and recent raw documents, with no static Commands block."""
     out = tmp_path / "site"
     out.mkdir()
     files = scan_raw_docs(docs_dir)
@@ -339,16 +332,16 @@ def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):
     assert 'detailsSection("Commands"' in JS
     assert "Open Raw browser" not in html_text
 
-
 def test_render_index_empty_state(tmp_path: Path):
+    """The Home page shows an empty-state message when there are no raw documents."""
     out = tmp_path / "site"
     out.mkdir()
     render_index(build_tree([]), [], 0, out)
     html_text = (out / "index.html").read_text(encoding="utf-8")
     assert "No recent raw documents yet" in html_text
 
-
 def test_render_recent_lists_docs_with_meta(docs_dir: Path, tmp_path: Path):
+    """The Recent page lists documents newest first with part counts and dates."""
     out = tmp_path / "site"
     out.mkdir()
     files = scan_raw_docs(docs_dir)
@@ -358,22 +351,21 @@ def test_render_recent_lists_docs_with_meta(docs_dir: Path, tmp_path: Path):
     assert "3 parts" in html_text
     assert "2026-07-01" in html_text
 
-
 def test_nav_order_and_no_changelog():
+    """The nav bar links appear in the documented order and carry no changelog link."""
     html_text = nav_bar(active="home")
     links = ["Home", "Raw", "Graph", "Projects", "Sessions", "Analytics", "Docs"]
     positions = [html_text.index(f">{label}</a>") for label in links]
     assert positions == sorted(positions)
     assert "changelog" not in html_text.lower()
 
-
 def _doc(rel, project=None):
     """Helper to create a RawDocFile for testing."""
     meta = {"project": project} if project else {}
     return RawDocFile(path=Path("/x"), rel=PurePosixPath(rel), meta=meta, body="")
 
-
 def test_count_docs_by_project_uses_frontmatter_then_folder():
+    """Documents are counted per project using frontmatter, then the folder name, then the file stem."""
     files = [
         _doc("alpha/a.md", project="proj-x"),
         _doc("alpha/b.md", project="proj-x"),
@@ -383,14 +375,12 @@ def test_count_docs_by_project_uses_frontmatter_then_folder():
     counts = count_docs_by_project(files)
     assert counts == {"proj-x": 2, "beta": 1, "solo": 1}
 
-
 def _iter_tree_leaves(node: dict) -> list[dict]:
     """Flatten documents-tree.json leaves depth-first."""
     leaves = list(node.get("files") or [])
     for folder in node.get("folders") or []:
         leaves.extend(_iter_tree_leaves(folder))
     return leaves
-
 
 def test_search_index_documents_match_tree_leaves(docs_dir: Path, tmp_path: Path):
     """search-index document set ≡ documents-tree leaves (ids/titles/hrefs)."""
@@ -411,7 +401,6 @@ def test_search_index_documents_match_tree_leaves(docs_dir: Path, tmp_path: Path
     index_set = {(e["id"], e["title"], e["url"]) for e in docs}
     assert tree_set == index_set
     assert len(docs) == len(entries) == 2
-
 
 def test_multipart_doc_is_one_search_palette_entry(docs_dir: Path, tmp_path: Path):
     """A 3-chunk runbook yields one type:document meta entry, not three."""

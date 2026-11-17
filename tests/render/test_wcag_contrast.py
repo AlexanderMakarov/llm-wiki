@@ -1,4 +1,4 @@
-"""#459: WCAG 2.1 AA contrast guard for both light and dark themes.
+"""#459 / #480: WCAG 2.1 AA contrast guard for both light and dark themes.
 
 The reported issue was visual — multiple text/background pairs on the
 emitted site looked low-contrast. Auditing the agent badges revealed
@@ -11,10 +11,14 @@ real failures in the light theme:
 
 The fix darkens those four light-theme text colors. These tests pin
 the contrast contract for the surfaces the issue called out, computed
-from the literal colors in `llmwiki/render/css.py` rather than running
-axe-core in a browser. axe-core in CI is the right tool for an end-to-
-end pass; this unit test is the per-commit guard so a CSS edit can't
-regress contrast silently.
+from the colors parsed out of the emitted stylesheet (`llmwiki/render/css.py`)
+rather than from copies of them, and without running axe-core in a browser.
+axe-core in CI is the right tool for an end-to-end pass; this unit test is
+the per-commit guard so a CSS edit can't regress contrast silently.
+
+#480 (merged from the former ``test_chip_contrast``): the yellow chip text
+was bumped from ``#b45309`` to ``#92400e`` so it passes 4.5:1 on ``#fef3c7``;
+the parametrized freshness-chip check pins that fix for every chip and theme.
 """
 from __future__ import annotations
 
@@ -29,14 +33,11 @@ from llmwiki.render.css import CSS
 AA_NORMAL = 4.5
 AA_LARGE = 3.0
 
-
 # ─── Pure WCAG math, no deps ──────────────────────────────────────────
-
 
 def _hex_to_rgb(h: str) -> tuple[int, int, int]:
     h = h.lstrip("#")
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-
 
 def _rel_lum(rgb: tuple[int, int, int]) -> float:
     def _ch(c: int) -> float:
@@ -46,12 +47,10 @@ def _rel_lum(rgb: tuple[int, int, int]) -> float:
     r, g, b = rgb
     return 0.2126 * _ch(r) + 0.7152 * _ch(g) + 0.0722 * _ch(b)
 
-
 def _contrast(fg: tuple[int, int, int], bg: tuple[int, int, int]) -> float:
     fl, bl = _rel_lum(fg), _rel_lum(bg)
     lo, hi = min(fl, bl), max(fl, bl)
     return (hi + 0.05) / (lo + 0.05)
-
 
 def _alpha_blend(
     fg_rgba: tuple[int, int, int, float],
@@ -67,9 +66,7 @@ def _alpha_blend(
         round(b * a + bb * (1 - a)),
     )
 
-
 # ─── Theme palette pulled from CSS ────────────────────────────────────
-
 
 def _css_var(theme: str, name: str) -> str:
     """Read a `--var: #hex;` from the appropriate :root block in CSS."""
@@ -85,9 +82,7 @@ def _css_var(theme: str, name: str) -> str:
     assert var_match, f"variable {name!r} not found in {theme} :root"
     return var_match.group(1)
 
-
 # ─── Static text-on-bg pairs (the most prominent surfaces) ────────────
-
 
 PAIRS = [
     # (theme, fg_var, bg_var, threshold, label)
@@ -105,11 +100,11 @@ PAIRS = [
     ("dark", "--accent", "--bg-card", AA_NORMAL, "accent on bg-card"),
 ]
 
-
 @pytest.mark.parametrize("theme,fg_var,bg_var,thresh,label", PAIRS)
 def test_palette_pair_meets_wcag_aa(
     theme: str, fg_var: str, bg_var: str, thresh: float, label: str
 ) -> None:
+    """Each core text/accent token pair in the emitted theme palette meets its WCAG AA threshold."""
     fg = _hex_to_rgb(_css_var(theme, fg_var))
     bg = _hex_to_rgb(_css_var(theme, bg_var))
     ratio = _contrast(fg, bg)
@@ -118,80 +113,76 @@ def test_palette_pair_meets_wcag_aa(
         f"threshold {thresh}:1 ({fg_var} on {bg_var})"
     )
 
+# ─── Live-CSS rule readers ────────────────────────────────────────────
+
+_HEX6 = r"#[0-9a-fA-F]{6}"
+
+def _rule_body(selector: str, theme: str) -> str:
+    """Return the declaration block of ``selector`` for ``theme`` as emitted in the live CSS."""
+    prefix = r':root\[data-theme="dark"\]\s+' if theme == "dark" else ""
+    m = re.search(rf"^{prefix}{re.escape(selector)}\s*\{{([^}}]*)\}}", CSS, re.MULTILINE)
+    assert m, f"could not locate {theme} rule for {selector!r} in CSS"
+    return m.group(1)
+
+def _declared_hex(selector: str, theme: str, prop: str) -> str:
+    m = re.search(rf"(?<![-\w]){prop}\s*:\s*({_HEX6})", _rule_body(selector, theme))
+    assert m, f"{theme} {selector}: no hex {prop} declared"
+    return m.group(1)
+
+def _declared_rgba(selector: str, theme: str) -> tuple[int, int, int, float]:
+    m = re.search(
+        r"(?<![-\w])background\s*:\s*rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)",
+        _rule_body(selector, theme),
+    )
+    assert m, f"{theme} {selector}: no rgba() background declared"
+    r, g, b, a = m.groups()
+    return int(r), int(g), int(b), float(a)
 
 # ─── Agent badge contrast (alpha-blended bg over page bg) ─────────────
 
+# Each agent badge in CSS has the shape
+#   .agent-X { color: #FG; background: rgba(R,G,B,0.1); border-color: ... }
+# and sits directly on the page bg (--bg), so the effective bg is the alpha-blend
+# of the rgba over the theme's page background. Colours are read from the live CSS.
+AGENTS = ["agent-claude", "agent-codex", "agent-copilot", "agent-cursor", "agent-gemini"]
 
-# Each agent badge in CSS has the shape:
-#   .agent-X   { color: #FG; background: rgba(R,G,B,0.10); border-color: ... }
-# The badge sits directly on the page bg (--bg), so the effective bg is
-# the alpha-blend of the rgba over white (light) or near-black (dark).
-AGENT_BADGES_LIGHT = {
-    # name           fg hex      bg rgba (R,G,B,a)
-    "agent-claude":  ("#7C3AED", (124, 58, 237, 0.10)),
-    "agent-codex":   ("#047857", (5, 150, 105, 0.10)),
-    "agent-copilot": ("#1E40AF", (37, 99, 235, 0.10)),
-    "agent-cursor":  ("#92400E", (217, 119, 6, 0.10)),
-    "agent-gemini":  ("#991B1B", (220, 38, 38, 0.10)),
-}
-AGENT_BADGES_DARK = {
-    "agent-claude":  ("#A78BFA", (167, 139, 250, 0.15)),
-    "agent-codex":   ("#34D399", (52, 211, 153, 0.15)),
-    "agent-copilot": ("#60A5FA", (96, 165, 250, 0.15)),
-    "agent-cursor":  ("#FBBF24", (251, 191, 36, 0.15)),
-    "agent-gemini":  ("#F87171", (248, 113, 113, 0.15)),
-}
-
-
-@pytest.mark.parametrize("name,colors", list(AGENT_BADGES_LIGHT.items()))
-def test_agent_badge_light_meets_aa(name: str, colors: tuple[str, tuple[int, int, int, float]]) -> None:
-    fg_hex, bg_rgba = colors
-    page_bg = _hex_to_rgb(_css_var("light", "--bg"))
-    eff_bg = _alpha_blend(bg_rgba, page_bg)
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("name", AGENTS)
+def test_agent_badge_meets_aa(name: str, theme: str) -> None:
+    """Each agent badge's emitted text colour reaches 4.5:1 on its alpha-blended background in both themes."""
+    selector = f".{name}"
+    fg_hex = _declared_hex(selector, theme, "color")
+    page_bg = _hex_to_rgb(_css_var(theme, "--bg"))
+    eff_bg = _alpha_blend(_declared_rgba(selector, theme), page_bg)
     ratio = _contrast(_hex_to_rgb(fg_hex), eff_bg)
     assert ratio >= AA_NORMAL, (
-        f"{name} (light): contrast {ratio:.2f}:1 < {AA_NORMAL}:1 — "
+        f"{name} ({theme}): contrast {ratio:.2f}:1 < {AA_NORMAL}:1 — "
         f"text {fg_hex} on effective bg rgb{eff_bg}"
     )
 
+# ─── Freshness chip contrast, pinned against the live CSS (#480) ──────
 
-@pytest.mark.parametrize("name,colors", list(AGENT_BADGES_DARK.items()))
-def test_agent_badge_dark_meets_aa(name: str, colors: tuple[str, tuple[int, int, int, float]]) -> None:
-    fg_hex, bg_rgba = colors
-    page_bg = _hex_to_rgb(_css_var("dark", "--bg"))
-    eff_bg = _alpha_blend(bg_rgba, page_bg)
-    ratio = _contrast(_hex_to_rgb(fg_hex), eff_bg)
-    assert ratio >= AA_NORMAL, (
-        f"{name} (dark): contrast {ratio:.2f}:1 < {AA_NORMAL}:1 — "
-        f"text {fg_hex} on effective bg rgb{eff_bg}"
-    )
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("name", ["fresh-green", "fresh-yellow", "fresh-red"])
+def test_freshness_chip_meets_aa(name: str, theme: str) -> None:
+    """Each `.fresh-*` chip's emitted text/background pair reaches 4.5:1 in both themes.
 
-
-# ─── Freshness chip contrast ──────────────────────────────────────────
-
-FRESH_LIGHT = [
-    ("fresh-green", "#15803d", "#dcfce7"),
-    ("fresh-yellow", "#92400e", "#fef3c7"),
-    ("fresh-red", "#b91c1c", "#fee2e2"),
-]
-FRESH_DARK = [
-    ("fresh-green", "#86efac", "#052e16"),
-    ("fresh-yellow", "#fcd34d", "#3a2a06"),
-    ("fresh-red", "#fca5a5", "#3a0a0a"),
-]
-
-
-@pytest.mark.parametrize("name,fg,bg", FRESH_LIGHT)
-def test_freshness_chip_light_meets_aa(name: str, fg: str, bg: str) -> None:
+    The yellow chip text was bumped from ``#b45309`` (4.49:1) to ``#92400e`` on ``#fef3c7``;
+    this check fails if that — or any other chip — slips back under AA.
+    """
+    selector = f".{name}"
+    fg = _declared_hex(selector, theme, "color")
+    bg = _declared_hex(selector, theme, "background")
     ratio = _contrast(_hex_to_rgb(fg), _hex_to_rgb(bg))
-    assert ratio >= AA_NORMAL, (
-        f"{name} (light): contrast {ratio:.2f}:1 < {AA_NORMAL}:1"
-    )
+    assert ratio >= AA_NORMAL, f"{name} ({theme}): contrast {ratio:.2f}:1 < {AA_NORMAL}:1 (fg={fg}, bg={bg})"
 
-
-@pytest.mark.parametrize("name,fg,bg", FRESH_DARK)
-def test_freshness_chip_dark_meets_aa(name: str, fg: str, bg: str) -> None:
-    ratio = _contrast(_hex_to_rgb(fg), _hex_to_rgb(bg))
-    assert ratio >= AA_NORMAL, (
-        f"{name} (dark): contrast {ratio:.2f}:1 < {AA_NORMAL}:1"
-    )
+@pytest.mark.parametrize(
+    "theme,card_bg",
+    [("light", (255, 255, 255)), ("dark", None)],
+)
+def test_token_ratio_tier_yellow_meets_aa(theme: str, card_bg: tuple[int, int, int] | None) -> None:
+    """The token-ratio yellow tier value reaches 4.5:1 on its card background in both themes."""
+    fg = _declared_hex(".token-ratio-value.tier-yellow", theme, "color")
+    bg = card_bg or _hex_to_rgb(_css_var("dark", "--bg-card"))
+    ratio = _contrast(_hex_to_rgb(fg), bg)
+    assert ratio >= AA_NORMAL, f".token-ratio-value.tier-yellow ({theme}) contrast {ratio:.2f}:1 (fg={fg})"

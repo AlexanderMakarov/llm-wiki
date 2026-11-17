@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from llmwiki.cli import build_parser, cmd_search
-from tests.cli._paths import REPO_ROOT
+from tests._paths import REPO_ROOT
 
 
 def _make_vault(tmp_path: Path) -> Path:

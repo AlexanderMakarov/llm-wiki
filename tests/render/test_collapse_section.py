@@ -1,4 +1,5 @@
-"""Shared collapse_section widget used by Home + Analytics."""
+"""Shared collapse_section widget used by Home + Analytics.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ from llmwiki.viz_wiki_value import render_wiki_value_section
 
 
 def test_collapse_section_escapes_title_and_shows_count():
+    """`collapse_section` HTML-escapes its title, renders the count badge and starts closed."""
     html = collapse_section("A <b>title</b>", 3, "<p>body</p>")
     assert "A &lt;b&gt;title&lt;/b&gt;" in html
     assert 'class="collapse-section"' in html
@@ -18,8 +20,8 @@ def test_collapse_section_escapes_title_and_shows_count():
     assert "<p>body</p>" in html
     assert " open" not in html
 
-
 def test_collapse_section_open_and_list_helpers():
+    """The `open` flag, list helper (with intro, footer and count) and wrapper compose into the expected collapse markup."""
     opened = collapse_section("T", 0, "x", open=True)
     assert "<details class=\"collapse-section\" open>" in opened
     listed = collapse_section_list(
@@ -37,8 +39,8 @@ def test_collapse_section_open_and_list_helpers():
     assert wrap.startswith('<div class="collapse-sections">')
     assert wrap.count("collapse-section") >= 2
 
-
 def test_analytics_dead_stock_uses_collapse_section():
+    """The Analytics dead-stock list renders inside the shared collapse section, with its count and every listed page."""
     out = render_wiki_value_section(
         {"total_calls": 1, "per_tool": {"wiki_query": {"calls": 1, "zero_hits": 0}}},
         dead_stock=["wiki/sources/x.md", "wiki/sources/y.md", "wiki/sources/z.md"],

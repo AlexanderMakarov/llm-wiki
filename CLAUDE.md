@@ -10,6 +10,8 @@ llmwiki install-agent-kit --dest ~/.claude
 ```
 
 > **Changing llmwiki's own code or docs?** Read [`CONTRIBUTING.md`](CONTRIBUTING.md), whose short form is loaded automatically from [`.claude/rules/contributing.md`](.claude/rules/contributing.md) when you touch `llmwiki/`, `tests/`, `scripts/`, or `docs/`. Run `ruff check` and `python3 -m pytest tests/ -q` before pushing. CI greps every committed `*.md` and `*.py` for strings that must never reach the repo (real usernames, personal paths): read [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the enforced list rather than guessing at it, and write about one with a placeholder — naming it literally, even to document it, trips the gate.
+>
+> **Tests assert product behaviour, not the edit.** Cover CLI/HTML/contracts the user (or operator) can observe. Do not add pytest that only proves a refactor happened — e.g. which `tests/*.py` files exist, were renamed, or match a hard-coded filename list. Layout and naming conventions live in [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md); review and docs enforce them.
 
 ## Three layers
 

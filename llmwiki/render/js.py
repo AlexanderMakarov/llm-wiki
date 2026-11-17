@@ -1475,7 +1475,7 @@ document.addEventListener("DOMContentLoaded", function () {
 // `llmwiki/search/engine.py::search_match`, which stay the originals.
 //
 // Everything between the BEGIN and END markers is DOM-free and
-// self-contained so `tests/test_248_palette_match.py` can lift it out and
+// self-contained so `tests/render/test_palette_match.py` can lift it out and
 // run it under node against those originals. Keep it that way: no
 // `document`, and no call out to a helper defined elsewhere.
 var LLMWIKI_MATCH = (function () {
@@ -2776,7 +2776,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // ─── Documents tree filter (#305) ── BEGIN ────────────────────────────────
 // Quick filter for the Raw Documents sidebar. DOM-free so
-// `tests/test_documents_tree_filter.py` can lift this block and run it under
+// `tests/render/test_documents_tree_filter.py` can lift this block and run it under
 // node. Matching is case-insensitive starts-with-then-contains on leaf
 // `label`; ancestor folders of matches stay; non-matching siblings drop.
 var LLMWIKI_DOCTREE_FILTER = (function () {
