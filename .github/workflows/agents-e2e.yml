@@ -9,6 +9,7 @@ on:
       - "playwright.config.ts"
       - "package.json"
       - "package-lock.json"
+      - ".github/workflows/agents-e2e.yml"
   push:
     branches: [main]
     paths:
@@ -16,13 +17,15 @@ on:
       - "llmwiki/render/**"
       - "tests/agents/**"
       - "playwright.config.ts"
+      - ".github/workflows/agents-e2e.yml"
 
 permissions:
   contents: read
 
 jobs:
   agents-e2e:
-    runs-on: ubuntu-latest
+    # Pin 24.04: ubuntu-latest moved to 26.04 and Playwright 1.58 cannot install Chromium there.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

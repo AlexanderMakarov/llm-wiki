@@ -39,7 +39,8 @@ on:
 jobs:
   e2e:
     name: Playwright + pytest-bdd
-    runs-on: ubuntu-latest
+    # Pin 24.04: ubuntu-latest moved to 26.04; Playwright browser install is not supported there yet.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
