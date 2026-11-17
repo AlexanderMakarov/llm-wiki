@@ -28,8 +28,7 @@ on:
 jobs:
   smoke:
     name: ${{ matrix.browser }} smoke
-    # Pin 24.04: ubuntu-latest moved to 26.04; Playwright browser install is not supported there yet.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 8
     strategy:
       fail-fast: false

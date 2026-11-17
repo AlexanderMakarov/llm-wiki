@@ -88,6 +88,8 @@ dev = [
 e2e = [
     "pytest>=8.4.2,<9.2",
     "pytest-playwright>=0.7.1",
+    # Ubuntu 26.04 (GitHub ubuntu-latest) needs Playwright ≥1.61 for Chromium install.
+    "playwright>=1.61.0",
     "pytest-bdd>=8.1.0",
     "pytest-html>=4.2.0",
     # Pillow powers the image-diff used by tests/e2e/test_visual_regression.py.

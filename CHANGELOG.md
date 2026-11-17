@@ -139,8 +139,8 @@ Versions below 1.0 are pre-production — API and file formats may change.
 
 ### Fixed
 
-- **Playwright CI jobs pin `ubuntu-24.04` (#315)** — GitHub’s `ubuntu-latest` label now resolves to 26.04, where Playwright 1.58 cannot install Chromium (`agents-e2e` failed at browser install). The TS agents e2e, pytest-bdd e2e, and cross-browser smoke workflows run on `ubuntu-24.04` until Playwright supports 26.04.
-  - *Release note:* Maintainers only: Playwright GitHub Actions jobs use Ubuntu 24.04 runners (#315).
+- **Playwright upgraded for Ubuntu 26.04 CI (#315)** — GitHub’s `ubuntu-latest` now resolves to 26.04; Playwright before 1.61 cannot install Chromium there (`agents-e2e` failed at browser install). Bump `@playwright/test` to ^1.65.1 and require `playwright>=1.61.0` in the `[e2e]` extra so jobs stay on `ubuntu-latest`.
+  - *Release note:* Maintainers only: Playwright ≥1.61 (npm agents suite on 1.65.x) for Ubuntu 26.04 GitHub runners (#315).
 
 - **Parallel synth interrupt test no longer flakes on worker timing (#171)** — `test_an_interrupt_records_the_pages_that_reached_disk` asserted exactly three pages on disk after the first `KeyboardInterrupt` during state save, which failed intermittently when fewer workers had finished writing. It now checks that every page on disk has a matching synth-state entry (and that resume does not re-synthesize pages already written).
   - *Release note:* Maintainers only: CI/local runs no longer hit intermittent failures in the parallel synth interrupt test (#171).
