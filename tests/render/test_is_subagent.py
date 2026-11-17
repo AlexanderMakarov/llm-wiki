@@ -11,6 +11,9 @@ filename was misclassified in the rendered UI.
 The fix: new `_is_subagent(meta, path)` helper that prefers the
 frontmatter field, falls back to the substring check only when the
 field is missing (back-compat for pre-#406 raw files).
+
+# @spec: 414-tests-render-mirror
+# #315
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from llmwiki.build import _is_subagent
 
 
 def test_explicit_true_returns_true():
+    """An explicit `is_subagent: true` frontmatter value classifies the session as a sub-agent."""
     assert _is_subagent({"is_subagent": True}, Path("anything.md")) is True
 
 
@@ -35,11 +39,13 @@ def test_explicit_false_returns_false_even_when_path_says_otherwise():
 
 
 def test_string_true_variants_coerce_to_true():
+    """String spellings of true (`true`, `yes`, `1`, any case) coerce to a sub-agent."""
     for s in ("true", "True", "TRUE", "yes", "1"):
         assert _is_subagent({"is_subagent": s}, Path("x.md")) is True, s
 
 
 def test_string_false_variants_coerce_to_false():
+    """String spellings of false (`false`, `no`, `0`, any case) coerce to not a sub-agent."""
     for s in ("false", "False", "FALSE", "no", "0"):
         assert _is_subagent({"is_subagent": s}, Path("x.md")) is False, s
 
@@ -53,11 +59,13 @@ def test_missing_field_falls_back_to_substring():
 
 
 def test_unrecognised_string_falls_back_to_substring():
+    """An unrecognised string value falls back to the filename substring rule."""
     assert _is_subagent({"is_subagent": "maybe"}, Path("x.md")) is False
     assert _is_subagent({"is_subagent": "maybe"}, Path("subagent-x.md")) is True
 
 
 def test_none_value_falls_back_to_substring():
+    """A null `is_subagent` value falls back to the filename substring rule."""
     assert _is_subagent({"is_subagent": None}, Path("subagent-x.md")) is True
     assert _is_subagent({"is_subagent": None}, Path("foo.md")) is False
 

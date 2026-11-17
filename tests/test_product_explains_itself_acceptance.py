@@ -7,7 +7,7 @@
 Checks the repository against
 ``context/spec/008-make-product-explain-itself/functional-spec.md`` as a whole.
 Mechanics live with their modules: the serve removal and ``--local-root`` in
-``tests/test_static_site_no_server.py``, the ``wiki-checks`` lint gate in
+``tests/render/test_static_site.py``, the ``wiki-checks`` lint gate in
 ``tests/test_ci_workflow.py``, the source-checkout guard in
 ``tests/test_source_checkout_guard.py``.
 

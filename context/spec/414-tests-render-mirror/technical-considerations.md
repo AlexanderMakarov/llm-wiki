@@ -1,7 +1,7 @@
 # Technical Specification: Mirror static-site / render unit tests under tests/render/
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---

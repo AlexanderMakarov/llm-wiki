@@ -47,7 +47,9 @@ Read all acceptance criteria from `functional-spec.md` for the entire feature. F
 
 Not every feature needs all four layers. Apply judgment.
 
-In **this repo**, unit tests live under `tests/` **mirroring** `llmwiki/` (e.g. `tests/cli/` for CLI). Extend an existing mirrored module when it already covers the area. Do not add new root sprawl (`tests/test_<feature>.py` as a one-off, or `tests/test_<digits>_*.py`). Link the issue or AWOS spec in the module docstring and/or `# @spec:` comments.
+In **this repo**, unit tests live under `tests/` **mirroring** `llmwiki/` (e.g. `tests/cli/` for CLI, `tests/render/` for static-site / `llmwiki.render`). Extend an existing mirrored module when it already covers the area. Do not add new root sprawl (`tests/test_<feature>.py` as a one-off, or `tests/test_<digits>_*.py`). Link the issue or AWOS spec in the module docstring and/or `# @spec:` comments.
+
+**Do not invent layout-inventory tests.** Never add acceptance/regression cases that only check which Python test modules exist, were moved, or match a filename list. Layout and docstring conventions live in [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md); product/behaviour tests assert CLI/HTML/contracts. A Feature Testing slice may assert that CODING_STANDARDS *mentions* the mirrored path — not that every migrated filename is present on disk.
 
 For every positive case, define at least one negative counterpart. Negative cases must include: invalid inputs, boundary values, error paths, permission failures, malformed data — whichever apply to this layer.
 

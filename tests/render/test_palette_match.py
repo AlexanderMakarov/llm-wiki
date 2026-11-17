@@ -10,6 +10,9 @@ be patched here — it is the reference.
 The second half covers presentation, which has one rule the parity tests
 cannot express: both groups always render, and a wiki page with no reader page
 is listed without becoming clickable.
+
+# @spec: 414-tests-render-mirror
+# #315
 """
 
 from __future__ import annotations
@@ -25,8 +28,8 @@ from llmwiki.build import WIKI_CORPUS_MANIFEST_KEY, build_wiki_corpus_entries
 from llmwiki.render.js import JS
 from llmwiki.search.corpus import ScannedPage
 from llmwiki.search.engine import DEFAULT_HIT_CAP, DEFAULT_PAGE_CAP, search_match
+from tests.render._paths import REPO_ROOT
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 DEMO_WIKI = REPO_ROOT / "demo" / "wiki"
 
 _BEGIN = "// ─── Wiki match mode (#248) ── BEGIN"
@@ -348,6 +351,7 @@ def test_common_site_text_is_still_capped_at_two_hundred(node_runner):
 
 
 def test_incomplete_corpus_status_has_a_visible_specific_warning(node_runner):
+    """An incomplete wiki-corpus status produces a warning naming the exhausted budget and the count of oversize pages."""
     message = node_runner({
         "op": "status",
         "status": {"budget_exhausted": True, "skipped_oversize_files": 2},

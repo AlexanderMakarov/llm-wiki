@@ -1,4 +1,4 @@
-"""#452: sessions/index.html shouldn't render the date in both the
+"""#452 / #454: sessions/index.html shouldn't render the date in both the
 Session cell and the Date column.
 
 Frontmatter for auto-generated session sources stores the title as
@@ -14,6 +14,12 @@ These tests pin the contract:
 3. Custom titles without the ``" — YYYY-MM-DD"`` suffix are left intact.
 4. The colgroup + ``table-layout: fixed`` rules are present so sticky
    header alignment doesn't regress.
+
+#454 (merged from the former ``test_filter_slug_label``): every control in the
+filter bar is wrapped in a ``<label>`` so screen readers announce it.
+
+# @spec: 414-tests-render-mirror
+# #315
 """
 from __future__ import annotations
 
@@ -64,6 +70,7 @@ def _link_text(td_html: str) -> str:
 
 
 def test_session_cell_no_longer_contains_date(tmp_path: Path) -> None:
+    """The Session cell shows only the slug while the Date column keeps the date."""
     sources = [_src("dark-mode-toggle", "2026-04-01", project="demo-blog-engine")]
     groups = {"demo-blog-engine": sources}
     out = render_sessions_index(sources, groups, tmp_path)
@@ -166,3 +173,51 @@ def test_sticky_thead_uses_nav_offset_without_overflow_scrollport() -> None:
         CSS,
         re.DOTALL,
     )
+
+
+# ─── Filter-bar labels (#454) ─────────────────────────────────────────
+
+
+def _render_filter_bar(tmp_path: Path) -> str:
+    sources = [_src("a", "2026-04-01"), _src("b", "2026-04-02")]
+    out = render_sessions_index(sources, {"demo": sources}, tmp_path)
+    return out.read_text(encoding="utf-8")
+
+
+def test_slug_input_wrapped_in_label(tmp_path: Path) -> None:
+    """The slug filter input sits inside a `<label>Slug …</label>` so screen readers announce it."""
+    html_text = _render_filter_bar(tmp_path)
+    # Span across newlines so the wrapper layout is allowed.
+    pattern = re.compile(
+        r'<label>\s*Slug\s*<input[^>]*id="filter-text"',
+        re.IGNORECASE,
+    )
+    assert pattern.search(html_text), (
+        "filter-text input must be wrapped in a `<label>Slug ...</label>` "
+        "so screen readers announce it consistently with the other filters"
+    )
+
+
+def test_all_filters_have_labels(tmp_path: Path) -> None:
+    """Project, Agent, Model, From, To, and Slug all need a `<label>` wrapper."""
+    html_text = _render_filter_bar(tmp_path)
+    for control_id in (
+        "filter-project",
+        "filter-agent",
+        "filter-model",
+        "filter-date-from",
+        "filter-date-to",
+        "filter-text",
+    ):
+        m = re.search(r'id="' + control_id + r'"', html_text)
+        assert m, f"{control_id} not in rendered html"
+        prefix = html_text[max(0, m.start() - 200) : m.start()]
+        assert "<label>" in prefix, f"{control_id} not wrapped in label"
+
+
+def test_agent_filter_and_data_attr(tmp_path: Path) -> None:
+    """The sessions index offers an agent filter and tags each row with `data-agent`."""
+    html_text = _render_filter_bar(tmp_path)
+    assert 'id="filter-agent"' in html_text
+    assert "All agents" in html_text
+    assert 'data-agent="' in html_text

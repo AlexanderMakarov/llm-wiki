@@ -13,6 +13,9 @@ none of them are visible from a unit test of the module that owns them:
 * Clustering groups on ``kind`` (the wiki folder) rather than ``type``,
   which is the constant ``'topic'`` for every node in topic mode.
 * Structural graph changes re-run the layout, which is otherwise frozen.
+
+# @spec: 414-tests-render-mirror
+# #315
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ def _write_doc(root: Path, rel: str, body: str) -> None:
 
 
 def test_docs_pages_emit_shared_page_foot(tmp_path: Path):
+    """Docs pages, including nested ones, emit the shared footer with a correctly prefixed `script.js`, palette markup and index URL."""
     _write_doc(tmp_path, "index.md", "# Hub\n\nBody.\n")
     _write_doc(tmp_path, "tutorials/01-a.md", "# 01 · A\n\nBody.\n")
     site = tmp_path / "site"
@@ -57,6 +61,7 @@ def test_docs_pages_emit_shared_page_foot(tmp_path: Path):
 
 
 def test_docs_pages_without_page_foot_still_close_the_document(tmp_path: Path):
+    """Docs pages rendered without a `page_foot` still close the HTML document and carry no `script.js`."""
     # page_foot stays optional so tests can render markup without the runtime.
     _write_doc(tmp_path, "index.md", "# Hub\n\nBody.\n")
     site = tmp_path / "site"
@@ -71,6 +76,7 @@ def test_docs_pages_without_page_foot_still_close_the_document(tmp_path: Path):
 
 
 def test_theme_cycle_starts_from_rendered_theme_not_storage():
+    """The theme toggle flips from the theme actually rendered on the page, so the first click always changes something."""
     # The pre-paint script always pins data-theme, so a cycle that begins by
     # pinning "dark" unconditionally is a no-op on an already-dark page.
     assert "function effectiveTheme()" in JS
@@ -78,6 +84,7 @@ def test_theme_cycle_starts_from_rendered_theme_not_storage():
 
 
 def test_theme_cycle_is_shared_by_both_toggles():
+    """Desktop and mobile toggles share one cycle implementation and one `localStorage` write."""
     # One implementation, so desktop and mobile can't drift apart.
     assert "window.__llmwikiCycleTheme = cycleTheme;" in JS
     assert JS.count("localStorage.setItem(\"llmwiki-theme\"") == 1, (
@@ -90,6 +97,7 @@ def test_theme_cycle_is_shared_by_both_toggles():
 
 
 def test_graph_only_prevents_context_menu_over_a_node():
+    """The graph swallows right-click only over a node, leaving empty canvas to the browser."""
     # preventDefault must sit inside the `if (nodeId)` branch — unconditional
     # prevention kills mouse-gesture extensions on the whole canvas.
     start = GRAPH_VIEWER_JS.index("network.on('oncontext'")
@@ -106,6 +114,7 @@ def test_graph_only_prevents_context_menu_over_a_node():
 
 
 def test_cluster_groups_on_kind_not_type():
+    """Graph clustering groups on `kind` and excludes existing cluster nodes so clusters do not nest."""
     assert "const nodeKind = n => n.kind || n.type || 'other';" in GRAPH_VIEWER_JS
     assert "joinCondition: n => !n.isKindCluster && nodeKind(n) === k" in GRAPH_VIEWER_JS
     # Existing clusters must be excluded or they nest inside the next one.
@@ -113,6 +122,7 @@ def test_cluster_groups_on_kind_not_type():
 
 
 def test_cluster_nodes_carry_no_vis_group_key():
+    """Cluster nodes carry no vis `group` key, so reopening a cluster keeps the per-kind colours."""
     # `group` is vis's own key: it re-applies an automatic palette when a
     # cluster reopens, overwriting our per-kind colours.
     assert "group: n.kind" not in GRAPH_VIEWER_JS
@@ -120,6 +130,7 @@ def test_cluster_nodes_carry_no_vis_group_key():
 
 
 def test_structural_graph_changes_restabilize():
+    """Layout and clustering both re-run the physics stabilisation so new nodes do not stack at one point."""
     # Physics is frozen after the first layout; without a re-run every node
     # created by (un)clustering stacks at one point.
     assert "function restabilize()" in GRAPH_VIEWER_JS
@@ -127,6 +138,7 @@ def test_structural_graph_changes_restabilize():
 
 
 def test_cluster_failures_surface_on_the_page():
+    """Graph clustering failures are reported through the page-level error bar."""
     assert "reportGraphError" in GRAPH_VIEWER_JS
     assert "window.__llmwikiReportError" in GRAPH_VIEWER_JS
 
@@ -151,6 +163,7 @@ def _seed_vault(wiki: Path) -> None:
 
 
 def test_topic_nodes_resolve_to_their_wiki_folder(tmp_path: Path):
+    """Topic graph nodes take their `kind` from the wiki folder holding their page, with `other` for unpaged wikilinks."""
     wiki = tmp_path / "wiki"
     _seed_vault(wiki)
     graph = build_topic_graph(wiki)
@@ -166,11 +179,13 @@ def test_topic_nodes_resolve_to_their_wiki_folder(tmp_path: Path):
 
 
 def test_hero_spacing_comes_from_tokens():
+    """The hero masthead spacing is driven by the `--hero-y` / `--hero-gap` design tokens."""
     # One place to tune the masthead rhythm for every page family.
     assert "--hero-y:" in CSS
     assert ".hero { padding: var(--hero-y); margin-bottom: var(--hero-gap);" in CSS
 
 
 def test_progress_bar_does_not_capture_pointer_events():
+    """The reading progress bar ignores pointer events so it never blocks clicks beneath it."""
     bar = CSS[CSS.index(".progress-bar {"):]
     assert "pointer-events: none;" in bar[:bar.index("}")]

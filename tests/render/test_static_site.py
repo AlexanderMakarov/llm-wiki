@@ -14,6 +14,9 @@ Covers:
 * ``--local-root`` makes the displayed path a build input, so two builds in
   different environments produce byte-identical output.
 * A built site references no script or stylesheet file over ``https://``.
+
+# @spec: 414-tests-render-mirror
+# #315
 """
 
 from __future__ import annotations
@@ -27,9 +30,8 @@ from pathlib import Path
 
 import pytest
 
-from llmwiki import REPO_ROOT
 from llmwiki import build as build_mod
-from llmwiki.cli import build_parser
+from tests.render._paths import REPO_ROOT
 
 # A `<link rel="stylesheet">` may still name a web-font *service* endpoint:
 # it serves @font-face rules, carries no file extension, and the site falls
@@ -45,19 +47,9 @@ _ASSET_FILE_RE = re.compile(r"\.(?:js|css)\b")
 # ─── the server is gone ──────────────────────────────────────────────────
 
 
-def test_serve_is_not_a_subcommand():
-    # @regression
-    parser = build_parser()
-    choices = {
-        name
-        for action in parser._subparsers._group_actions  # noqa: SLF001
-        for name in action.choices
-    }
-    assert "serve" not in choices
-    assert "build" in choices, "sanity: subcommand discovery still works"
-
-
 def test_serve_cli_invocation_fails():
+    """`llmwiki serve` is rejected by the CLI as an invalid subcommand."""
+    # @regression
     proc = subprocess.run(
         [sys.executable, "-m", "llmwiki", "serve"],
         cwd=str(REPO_ROOT),
@@ -71,6 +63,7 @@ def test_serve_cli_invocation_fails():
 
 @pytest.mark.parametrize("name", ["serve.sh", "serve.bat", "llmwiki/serve.py"])
 def test_serve_helpers_are_gone(name: str):
+    """The server entry scripts and module no longer ship in the repo."""
     assert not (REPO_ROOT / name).exists(), f"{name} still ships"
 
 
@@ -157,6 +150,7 @@ def test_apply_rebuilds_candidates_html_by_default(tmp_path: Path) -> None:
 
 
 def test_apply_no_rebuild_leaves_the_built_page_stale(tmp_path: Path) -> None:
+    """`candidates apply --no-rebuild` executes the batch but leaves the built `candidates.html` byte-identical."""
     root = tmp_path / "vault"
     _seed_raw(root)
     wiki = root / "wiki"
@@ -306,6 +300,7 @@ def test_without_the_flag_two_environments_diverge(tmp_path: Path):
 
 
 def test_without_the_flag_the_path_follows_the_current_run(tmp_path: Path):
+    """With no `--local-root`, the displayed cwd follows the home directory of the current build."""
     site = _build(tmp_path, "c", home="/home/alice", local_root=None)
     assert "/home/alice/code/demo-proj" in _html_bodies(site)["sessions/index.html"]
 
@@ -340,6 +335,7 @@ def test_no_https_script_or_stylesheet_file(built_site: Path):
 
 
 def test_no_https_script_tags_at_all(built_site: Path):
+    """No built page loads any `<script src="https://…">`, whatever its file extension."""
     # @regression
     offenders = [
         f"{name}: {url}"
@@ -370,6 +366,7 @@ def test_pages_load_their_data_through_a_script_tag(built_site: Path):
 
 
 def test_no_page_issues_a_same_origin_fetch(built_site: Path):
+    """No built page contains a same-origin `fetch("/…")`, which `file://` blocks."""
     # @regression
     offenders = [
         name for name, body in _html_bodies(built_site).items()

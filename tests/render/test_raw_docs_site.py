@@ -4,6 +4,9 @@
 ``llmwiki.raw_docs_site`` models ``raw/docs/**`` (the wiki-add layer);
 ``llmwiki.build`` renders it as ``index.html`` (tree browser),
 ``recent.html`` (newest documents), and one page per document file.
+
+# @spec: 414-tests-render-mirror
+# #315
 """
 
 from __future__ import annotations
@@ -68,6 +71,7 @@ def docs_dir(tmp_path: Path) -> Path:
 
 
 def test_scan_finds_all_files_sorted(docs_dir: Path):
+    """`scan_raw_docs` returns every raw document under the docs folder in sorted order."""
     files = scan_raw_docs(docs_dir)
     assert [f.rel.as_posix() for f in files] == [
         "runbook/runbook-01.md",
@@ -78,6 +82,7 @@ def test_scan_finds_all_files_sorted(docs_dir: Path):
 
 
 def test_scan_skips_context_and_unsafe_files(docs_dir: Path):
+    """`scan_raw_docs` ignores `_context.md` and files under directories with unsafe names."""
     (docs_dir / "_context.md").write_text("folder meta", encoding="utf-8")
     evil = docs_dir / "a b"
     evil.mkdir()
@@ -88,10 +93,12 @@ def test_scan_skips_context_and_unsafe_files(docs_dir: Path):
 
 
 def test_scan_missing_dir_is_empty(tmp_path: Path):
+    """`scan_raw_docs` returns an empty list when the docs folder does not exist."""
     assert scan_raw_docs(tmp_path / "nope") == []
 
 
 def test_clean_chunk_title_strips_part_suffix():
+    """`clean_chunk_title` removes the `(part N/M: …)` suffix and leaves plain titles untouched."""
     assert clean_chunk_title("VPS Runbook (part 1/11: Intro)") == "VPS Runbook"
     assert clean_chunk_title("Plain Title") == "Plain Title"
 
@@ -149,6 +156,7 @@ def test_group_documents_two_docs_under_project_folder(tmp_path: Path):
 
 
 def test_group_documents_cleaned_titles(tmp_path: Path):
+    """Multi-part chunks group into one document entry with a part-free title."""
     d = tmp_path / "raw" / "docs"
     _write_doc(
         d, "guide/guide-01.md",
@@ -165,6 +173,7 @@ def test_group_documents_cleaned_titles(tmp_path: Path):
 
 
 def test_base_slug_from_stem():
+    """`base_slug_from_stem` strips a zero-padded chunk index but keeps an unpadded collision suffix."""
     assert base_slug_from_stem("runbook-01") == "runbook"
     assert base_slug_from_stem("runbook") == "runbook"
     # Collision suffix from add_doc._dedupe is unpadded — not a chunk index.
@@ -172,6 +181,7 @@ def test_base_slug_from_stem():
 
 
 def test_sidebar_marks_active_and_opens_folder(docs_dir: Path):
+    """The sidebar marks the active document and opens its folder with correct relative links."""
     files = scan_raw_docs(docs_dir)
     root = build_tree(files)
     active = files[1]  # runbook-02
@@ -210,6 +220,7 @@ def test_tree_to_dict_and_write_documents_tree(docs_dir: Path, tmp_path: Path):
 
 
 def test_document_pages_use_mount_not_inline_tree(docs_dir: Path, tmp_path: Path):
+    """Document pages mount the shared tree client-side instead of inlining it, and ship the sibling `.md` copies."""
     out = tmp_path / "site"
     files = scan_raw_docs(docs_dir)
     root = build_tree(files)
@@ -255,6 +266,7 @@ def test_strip_part_chrome_removes_degenerate_empty_bold_breadcrumb():
 
 
 def test_strip_part_chrome_removes_breadcrumb_and_title_h1():
+    """`strip_part_chrome` drops a chunk's breadcrumb line and title heading and keeps its body."""
     body = (
         "> Part 1 of 3 of **VPS Runbook** — Intro.\n\n"
         "# VPS Runbook (part 1/3: Intro)\n\n"
@@ -324,6 +336,7 @@ def test_unified_page_assembles_parts_and_stubs_redirect(docs_dir: Path, tmp_pat
 
 
 def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):
+    """The Home page renders the pipeline state widget and recent raw documents, with no static Commands block."""
     out = tmp_path / "site"
     out.mkdir()
     files = scan_raw_docs(docs_dir)
@@ -341,6 +354,7 @@ def test_render_index_is_tree_browser(docs_dir: Path, tmp_path: Path):
 
 
 def test_render_index_empty_state(tmp_path: Path):
+    """The Home page shows an empty-state message when there are no raw documents."""
     out = tmp_path / "site"
     out.mkdir()
     render_index(build_tree([]), [], 0, out)
@@ -349,6 +363,7 @@ def test_render_index_empty_state(tmp_path: Path):
 
 
 def test_render_recent_lists_docs_with_meta(docs_dir: Path, tmp_path: Path):
+    """The Recent page lists documents newest first with part counts and dates."""
     out = tmp_path / "site"
     out.mkdir()
     files = scan_raw_docs(docs_dir)
@@ -360,6 +375,7 @@ def test_render_recent_lists_docs_with_meta(docs_dir: Path, tmp_path: Path):
 
 
 def test_nav_order_and_no_changelog():
+    """The nav bar links appear in the documented order and carry no changelog link."""
     html_text = nav_bar(active="home")
     links = ["Home", "Raw", "Graph", "Projects", "Sessions", "Analytics", "Docs"]
     positions = [html_text.index(f">{label}</a>") for label in links]
@@ -374,6 +390,7 @@ def _doc(rel, project=None):
 
 
 def test_count_docs_by_project_uses_frontmatter_then_folder():
+    """Documents are counted per project using frontmatter, then the folder name, then the file stem."""
     files = [
         _doc("alpha/a.md", project="proj-x"),
         _doc("alpha/b.md", project="proj-x"),

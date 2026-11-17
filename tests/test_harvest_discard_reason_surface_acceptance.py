@@ -6,7 +6,7 @@
 
 Unit and slice coverage lives in ``tests/test_dismissal_ledger.py``,
 ``tests/test_candidates_near_match.py``, ``tests/test_candidates.py``,
-``tests/test_candidates_site.py``, and ``tests/test_migrate_dismissal_ledger.py``.
+``tests/render/test_candidates_site.py``, and ``tests/test_migrate_dismissal_ledger.py``.
 This file is **glue**: one vault journey per FR cluster from
 ``context/spec/326-harvest-discard-reason-surface/functional-spec.md`` (FR1–FR6).
 

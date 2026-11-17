@@ -1,7 +1,7 @@
 # Functional Specification: Mirror static-site / render unit tests under tests/render/
 
 - **Roadmap Item:** [test: mirror static site / render tests under tests/render/](https://github.com/AlexanderMakarov/llm-wiki/issues/315) — AWOS spec `414-tests-render-mirror`
-- **Status:** Approved
+- **Status:** Completed
 - **Author:** 4ellendger
 
 ---
@@ -21,26 +21,26 @@ Success: after this lands, the meaningful unit coverage for that area lives unde
 Unit tests that exist to protect static-site / HTML render behaviour are consolidated into a `tests/render/` tree (or equivalently named mirror of the render product package), grouped to match render subpackages where that mapping is practical.
 
 - **Acceptance Criteria:**
-  - [ ] Given a maintainer opens the tests tree after this change, when they look for static-site / HTML render unit coverage from this batch, then those cases live under the mirrored render tests tree rather than only as a flat root pile for that batch.
-  - [ ] Given a new contributor adds a unit check for a surface already covered by this batch, when they follow coding standards, then the natural place to extend is a module under that mirrored tree.
+  - [x] Given a maintainer opens the tests tree after this change, when they look for static-site / HTML render unit coverage from this batch, then those cases live under the mirrored render tests tree rather than only as a flat root pile for that batch. — evidence: 14 `tests/render/test_*.py`; flat batch originals absent; `test_quality_gates` package + modules-exist + no-flat-originals.
+  - [x] Given a new contributor adds a unit check for a surface already covered by this batch, when they follow coding standards, then the natural place to extend is a module under that mirrored tree. — evidence: `docs/CODING_STANDARDS.md` names `tests/render/`; quality-gate asserts that mention.
 
 ### 2.2 Behaviour and CI contracts preserved
 
 Moving and consolidating tests must not change what the product does, must not weaken the unit coverage gate, and must not delete cases merely to shrink counts.
 
 - **Acceptance Criteria:**
-  - [ ] Given the same inputs exercised by this batch before the move, when the suite runs after the move, then the asserted outcomes for product behaviour are unchanged.
-  - [ ] Given CI’s unit coverage gate (87%), when this change’s suite runs, then coverage stays at or above the gate.
-  - [ ] Given a reviewer diffs the batch, when they look for deletions, then removed tests are only vacuous, duplicate, or otherwise non-protective cases — not arbitrary cuts toward a percentage target.
+  - [x] Given the same inputs exercised by this batch before the move, when the suite runs after the move, then the asserted outcomes for product behaviour are unchanged. — evidence: `pytest tests/render/` and full `pytest tests/` green after migration (6813 passed).
+  - [x] Given CI’s unit coverage gate (87%), when this change’s suite runs, then coverage stays at or above the gate. — evidence: `--cov=llmwiki` **87.34%** (≥87%).
+  - [x] Given a reviewer diffs the batch, when they look for deletions, then removed tests are only vacuous, duplicate, or otherwise non-protective cases — not arbitrary cuts toward a percentage target. — evidence: hygiene removed tautology/import-path-only/duplicate chip-contrast and filter-label cases; protective destinations remain under `tests/render/`.
 
 ### 2.3 #280-style batch hygiene
 
 Within this render/static-site batch only: search existing coverage before adding, merge duplicates, delete vacuous tests, and give each test or parametrize group a one-sentence behaviour docstring.
 
 - **Acceptance Criteria:**
-  - [ ] Given two modules in the batch that asserted the same behaviour, when the batch lands, then one protective check remains.
-  - [ ] Given a test that asserted nothing useful about product behaviour, when the batch lands, then it is gone.
-  - [ ] Given each kept test or parametrize group in the batch, when a reviewer reads it, then a one-sentence behaviour docstring is present.
+  - [x] Given two modules in the batch that asserted the same behaviour, when the batch lands, then one protective check remains. — evidence: `test_chip_contrast` → `test_wcag_contrast`; `test_filter_slug_label` → `test_sessions_index`.
+  - [x] Given a test that asserted nothing useful about product behaviour, when the batch lands, then it is gone. — evidence: vacuous asserts removed from `test_split` / related modules in hygiene pass.
+  - [x] Given each kept test or parametrize group in the batch, when a reviewer reads it, then a one-sentence behaviour docstring is present. — evidence: `test_quality_gates` docstring invariant over `tests/render/`.
 
 ---
 

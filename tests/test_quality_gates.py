@@ -31,6 +31,10 @@ CANONICAL_TESTING_EXPERT = REPO_ROOT / ".claude" / "agents" / "testing-expert.md
 TESTS_DIR = REPO_ROOT / "tests"
 CLI_TESTS = TESTS_DIR / "cli"
 
+def _mirrored_test_package_has_modules(pkg: Path) -> None:
+    assert (pkg / "__init__.py").is_file()
+    assert any(pkg.glob("test_*.py"))
+
 
 # @regression
 def test_pyproject_coverage_report_fail_under_is_87() -> None:
@@ -100,17 +104,17 @@ def test_no_dead_removed_surface_skip_markers_under_tests() -> None:
 
 # @regression
 def test_coding_standards_doc_names_floor_and_cli_layout() -> None:
-    """Agents can load coding standards for the coverage floor and mirrored CLI tests."""
+    """Agents can load coding standards for the coverage floor and mirrored test packages."""
     text = CODING_STANDARDS.read_text(encoding="utf-8")
     assert "fail_under = 87" in text
     assert "tests/cli/" in text
+    assert "tests/render/" in text
 
 
 # @regression
 def test_cli_unit_tests_live_under_mirrored_cli_package() -> None:
     """CLI unit coverage lives under ``tests/cli/`` as a package with test modules."""
-    assert (CLI_TESTS / "__init__.py").is_file()
-    assert any(CLI_TESTS.glob("test_*.py"))
+    _mirrored_test_package_has_modules(CLI_TESTS)
 
 
 # @regression

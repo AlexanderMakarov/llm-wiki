@@ -2,8 +2,11 @@
 
 Lifts the DOM-free ``LLMWIKI_DOCTREE_FILTER`` block from
 ``llmwiki/render/js.py`` and runs it under ``node`` — same harness pattern as
-``test_248_palette_match.py`` (legacy issue-numbered name). Covers starts-with-then-contains order, ancestor
+``test_palette_match.py``. Covers starts-with-then-contains order, ancestor
 retention, substring highlight, and the empty-state copy.
+
+# @spec: 414-tests-render-mirror
+# #315
 """
 
 from __future__ import annotations
@@ -146,10 +149,12 @@ def node_runner(tmp_path_factory: pytest.TempPathFactory):
 
 
 def test_empty_copy_exact(node_runner) -> None:
+    """The documents-tree filter's empty state reads exactly `No documents match`."""
     assert node_runner({"op": "emptyCopy"}) == "No documents match"
 
 
 def test_match_kind_starts_contains_none(node_runner) -> None:
+    """`matchKind` classifies a label as a starts-with, contains-only or non-match for the query."""
     assert node_runner({"op": "matchKind", "label": "Alpha Plan", "queryLower": "alpha"}) == "starts"
     assert node_runner({"op": "matchKind", "label": "xAlpha", "queryLower": "alpha"}) == "contains"
     assert node_runner({"op": "matchKind", "label": "Beta", "queryLower": "alpha"}) is None
@@ -174,6 +179,7 @@ def test_filter_order_starts_before_contains(node_runner) -> None:
 
 
 def test_filter_keeps_ancestors_hides_non_matches(node_runner) -> None:
+    """Filtering keeps only the folder path to a matching file and drops non-matching siblings and folders."""
     out = node_runner({"op": "filter", "tree": _SAMPLE_TREE, "queryLower": "alpha plan"})
     # Only the notes → deep path to Alpha Plan; emptyish and sibling Other gone.
     assert [f["name"] for f in out["folders"]] == ["notes"]
@@ -186,6 +192,7 @@ def test_filter_keeps_ancestors_hides_non_matches(node_runner) -> None:
 
 
 def test_filter_ancestor_of_nested_contains(node_runner) -> None:
+    """A short query keeps every folder that holds a match, at any depth, and drops folders with none."""
     out = node_runner({"op": "filter", "tree": _SAMPLE_TREE, "queryLower": "alpha"})
     folder_names = [f["name"] for f in out["folders"]]
     assert folder_names == ["notes"]  # emptyish/Zeta dropped
@@ -199,6 +206,7 @@ def test_filter_ancestor_of_nested_contains(node_runner) -> None:
 
 
 def test_highlight_wraps_substring(node_runner) -> None:
+    """Every case-insensitive occurrence of the query in a label is wrapped in a highlight `<mark>`."""
     html = node_runner({"op": "highlight", "label": "Alpha Plan", "queryLower": "pha"})
     assert html == 'Al<mark class="doctree-filter-hit">pha</mark> Plan'
     multi = node_runner({"op": "highlight", "label": "aa AA", "queryLower": "a"})
@@ -206,6 +214,7 @@ def test_highlight_wraps_substring(node_runner) -> None:
 
 
 def test_render_opens_ancestors_and_highlights(node_runner) -> None:
+    """The filtered render forces matching ancestor folders open, highlights hits and omits non-matches."""
     html = node_runner(
         {
             "op": "render",
@@ -227,6 +236,7 @@ def test_render_opens_ancestors_and_highlights(node_runner) -> None:
 
 
 def test_render_empty_returns_null(node_runner) -> None:
+    """A query matching nothing renders `null` so the caller can show the empty state."""
     assert (
         node_runner(
             {
@@ -240,11 +250,13 @@ def test_render_empty_returns_null(node_runner) -> None:
 
 
 def test_css_has_filter_and_mark_rules() -> None:
+    """The stylesheet styles the tree filter input and its highlight mark."""
     assert ".doctree-filter" in CSS
     assert ".doctree-filter-hit" in CSS
 
 
 def test_js_ships_filter_input_wiring() -> None:
+    """The viewer script builds the filter input and ships the empty-state and highlight hooks."""
     assert 'className = "doctree-filter"' in JS
     assert "No documents match" in JS
     assert "doctree-filter-hit" in JS

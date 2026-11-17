@@ -10,6 +10,9 @@ The fix swaps the gate to a `.open` class and adds:
   - focus restoration to the original trigger on close
 
 These tests pin the markup, CSS, and JS contracts.
+
+# @spec: 414-tests-render-mirror
+# #315
 """
 from __future__ import annotations
 
@@ -34,6 +37,7 @@ def test_palette_markup_no_longer_uses_aria_hidden() -> None:
 
 
 def test_help_dialog_markup_no_longer_uses_aria_hidden() -> None:
+    """The help dialog container does not use `aria-hidden` as its visibility gate."""
     foot = _foot()
     assert '<div id="help-dialog" class="help-dialog">' in foot
     assert 'id="help-dialog" class="help-dialog" aria-hidden="true"' not in foot
@@ -50,6 +54,7 @@ def test_css_uses_open_class_for_palette_visibility() -> None:
 
 
 def test_css_uses_open_class_for_help_visibility() -> None:
+    """Help dialog visibility is driven by the `.open` class, not by an `aria-hidden` false selector."""
     assert ".help-dialog.open { display: block; }" in CSS
     assert '.help-dialog[aria-hidden="false"]' not in CSS
 
@@ -95,6 +100,7 @@ def test_js_palette_uses_dialog_helpers() -> None:
 
 
 def test_js_help_uses_dialog_helpers() -> None:
+    """Opening and closing the help dialog route through the shared inert and focus-restoring dialog helpers."""
     open_block = JS[JS.find("function openHelp()"): JS.find("function closeHelp()")]
     close_block = JS[JS.find("function closeHelp()"): JS.find("function closeHelp()") + 200]
     assert "__openDialog(d" in open_block

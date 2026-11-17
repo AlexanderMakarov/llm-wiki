@@ -4,6 +4,9 @@ Deciding is DOM state, so the page needs nothing running; only executing the
 decisions is a command-line step. The tests below cover both halves — the
 rendered controls in Python, and the batch the page's own script builds, run
 under `node` with a stub DOM (skipped when node is absent).
+
+# @spec: 414-tests-render-mirror
+# #315
 """
 
 from __future__ import annotations
@@ -34,8 +37,7 @@ from llmwiki.candidates_site import (
     validate_candidate_batch,
     vault_display_path,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from tests.render._paths import REPO_ROOT
 
 needs_node = pytest.mark.skipif(
     shutil.which("node") is None, reason="node not on PATH"
@@ -154,6 +156,7 @@ def _write_candidate(wiki: Path, kind: str, slug: str, *, body: str = "") -> Pat
 
 
 def test_render_candidates_body_lists_pending_and_offers_the_batch(tmp_path: Path) -> None:
+    """The candidates body lists pending entity and concept rows and offers one batch command field."""
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Alpha")
     _write_candidate(wiki, "concepts", "Beta")
@@ -342,6 +345,7 @@ def test_vault_display_path_is_relative_when_the_vault_is_under_cwd(
 
 
 def test_cli_command_for_action_shapes() -> None:
+    """Each review action renders to its `llmwiki candidates <action>` command with the flags it needs."""
     assert cli_command_for_action({
         "action": "promote", "slug": "Foo", "kind": "entities",
     }) == "llmwiki candidates promote --slug 'Foo' --kind entities"
@@ -354,6 +358,7 @@ def test_cli_command_for_action_shapes() -> None:
 
 
 def test_cli_command_for_actions_batch_one_line() -> None:
+    """A batch renders to a single-line `candidates apply --actions '<json>'` command whose payload is valid JSON."""
     cmd = cli_command_for_actions([
         {"action": "promote", "slug": "Obsidian", "kind": "entities"},
         {"action": "promote", "slug": "Prompt Caching", "kind": "concepts"},
@@ -370,6 +375,7 @@ def test_cli_command_for_actions_batch_one_line() -> None:
 
 
 def test_apply_candidate_actions_batch(tmp_path: Path) -> None:
+    """Applying a promote+discard batch moves the promoted page into the wiki and clears both candidates."""
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Keep")
     _write_candidate(wiki, "entities", "Drop")
@@ -404,31 +410,6 @@ def test_apply_refuses_a_batch_row_whose_slug_escapes_the_wiki(tmp_path: Path) -
     assert all(r["error"] for r in results)
     assert outside.read_text(encoding="utf-8") == "untouchable\n"
     assert (wiki / "candidates" / "entities" / "Keep.md").is_file()
-
-
-def test_cli_candidates_apply_batch(tmp_path: Path) -> None:
-    wiki = _mk_wiki(tmp_path)
-    _write_candidate(wiki, "entities", "Keep")
-    _write_candidate(wiki, "entities", "Drop")
-    payload = json.dumps([
-        {"action": "promote", "slug": "Keep", "kind": "entities"},
-        {"action": "discard", "slug": "Drop", "kind": "entities"},
-    ])
-    proc = subprocess.run(
-        [
-            sys.executable, "-m", "llmwiki", "candidates", "apply",
-            "--actions", payload,
-            "--wiki-dir", str(wiki),
-            "--no-rebuild",
-        ],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert (wiki / "entities" / "Keep.md").is_file()
-    assert not (wiki / "candidates" / "entities" / "Drop.md").exists()
 
 
 # ─── #149 batch conflict validation ──────────────────────────────────────
@@ -496,6 +477,7 @@ def test_collect_actions_refuses_merge_into_acted_on_peer(tmp_path: Path) -> Non
 
 
 def test_cli_candidates_apply_batch_conflict_exits_2(tmp_path: Path) -> None:
+    """A batch that discards a merge target exits 2 with a `batch conflict` error."""
     # @regression  #149
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Target")
@@ -547,6 +529,7 @@ def test_apply_candidate_actions_accepts_non_conflicting_merge_and_promote(
 
 
 def test_render_candidates_body_prints_the_command_it_hands_off_to(tmp_path: Path) -> None:
+    """The body ships an empty command element and the `candidates apply` prefix that Apply later fills in."""
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Alpha")
     html_out = render_candidates_body(wiki)
@@ -580,6 +563,7 @@ def test_apply_batches_only_the_rows_a_reviewer_decided(tmp_path: Path) -> None:
 
 @needs_node
 def test_apply_carries_the_field_each_action_needs(tmp_path: Path) -> None:
+    """Merge actions carry their target and discard actions their reason into the assembled batch."""
     out = _collect_actions([
         {"slug": "Dupe", "kind": "entities", "decision": "merge", "into": "Target"},
         {"slug": "Noise", "kind": "entities", "decision": "discard", "reason": "junk"},
@@ -596,6 +580,7 @@ def test_apply_carries_the_field_each_action_needs(tmp_path: Path) -> None:
 
 @needs_node
 def test_apply_refuses_a_merge_with_no_target(tmp_path: Path) -> None:
+    """Apply rejects a merge decision that names no target and reports the offending candidate."""
     out = _collect_actions([
         {"slug": "Dupe", "kind": "entities", "decision": "merge"},
     ], tmp_path)
@@ -605,6 +590,7 @@ def test_apply_refuses_a_merge_with_no_target(tmp_path: Path) -> None:
 
 @needs_node
 def test_typing_narrows_the_targets_case_insensitively(tmp_path: Path) -> None:
+    """The merge-target filter narrows by trimmed, case-insensitive substring and returns all names for an empty query."""
     names = ["Claude Code", "Codex CLI", "Obsidian", "Prompt Caching"]
 
     assert _filter_targets(names, "", tmp_path) == names
@@ -657,6 +643,7 @@ def test_apply_refuses_a_discard_with_no_reason(tmp_path: Path) -> None:
 
 @needs_node
 def test_apply_refuses_an_empty_batch(tmp_path: Path) -> None:
+    """Apply rejects a batch in which no row has a decision."""
     out = _collect_actions([
         {"slug": "Alpha", "kind": "entities", "decision": ""},
     ], tmp_path)
@@ -699,6 +686,7 @@ def test_the_assembled_batch_is_what_apply_executes(tmp_path: Path) -> None:
 
 
 def test_candidate_description_truncates(tmp_path: Path) -> None:
+    """A long candidate description is truncated with an ellipsis to at most 160 characters."""
     wiki = _mk_wiki(tmp_path)
     long = "word " * 80
     _write_candidate(wiki, "entities", "LongOne", body=f"# LongOne\n\n{long}")
@@ -709,6 +697,7 @@ def test_candidate_description_truncates(tmp_path: Path) -> None:
 
 
 def test_render_candidates_page_writes_html(tmp_path: Path) -> None:
+    """`render_candidates_page` writes `candidates.html` containing the candidate row and the command field."""
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Gamma")
     out = tmp_path / "site"
@@ -718,7 +707,6 @@ def test_render_candidates_page_writes_html(tmp_path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert "Gamma" in text
     assert "cand-command" in text
-    assert 'class="nav' in text or "candidates.html" in text
 
 
 # ─── prior dismissal near-match (#146 / #326) ───────────────────────────
@@ -851,6 +839,7 @@ def test_apply_carries_an_optional_discard_redirect(tmp_path: Path) -> None:
 
 
 def test_discard_row_offers_a_redirect_field(tmp_path: Path) -> None:
+    """Each candidate row ships a hidden redirect field for the discard decision."""
     wiki = _mk_wiki(tmp_path)
     _write_candidate(wiki, "entities", "Alpha")
     html_out = render_candidates_body(wiki)
@@ -859,6 +848,7 @@ def test_discard_row_offers_a_redirect_field(tmp_path: Path) -> None:
 
 
 def test_cli_command_for_discard_with_redirect() -> None:
+    """A discard with a redirect renders `--reason` and `--redirect` flags in the CLI command."""
     cmd = cli_command_for_action({
         "action": "discard", "slug": "Old Name", "reason": "dup", "redirect": "Proper",
     })
