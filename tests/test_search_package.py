@@ -68,6 +68,29 @@ def test_score_extract_title_bonus_unnormalised():
     assert score_extract(page, query) == pytest.approx(120.0)
 
 
+def test_score_extract_exact_title_bonus_casefolded_and_trimmed():
+    page = _page("wiki/Ferry.md", "unrelated body text here", title="Ferry Line")
+    query = ExtractQuery.parse("  fERRY line ")
+    # Padded phrase is not a substring of the title, so only tokens (+20 each)
+    # plus the exact whole-title bonus fire.
+    assert score_extract(page, query) == pytest.approx(40 + 200.0)
+
+
+def test_score_extract_exact_title_beats_short_substring_title_pages():
+    """#417: a long curated page titled ``Cursor`` outranks short ``Cursor session N`` pages."""
+    entity = _page(
+        "wiki/entities/Cursor.md",
+        "Cursor is an editor. " + ("Session list entry. " * 300),
+        title="Cursor",
+    )
+    flood = [
+        _page(f"wiki/sources/s{i:03d}.md", "Cursor", title=f"Cursor session {i}")
+        for i in range(50)
+    ]
+    hits = search_extract([*flood, entity], ["Cursor"], max_pages=1)["Cursor"]
+    assert hits[0].rel_path == "wiki/entities/Cursor.md"
+
+
 def test_score_extract_short_page_uses_256_floor():
     page = _page("wiki/x.md", "cat")  # len 3
     query = ExtractQuery.parse("cat")

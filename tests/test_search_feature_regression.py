@@ -174,6 +174,8 @@ def test_cli_lint_title_ambiguity_fires_on_crafted_defect(
     # @spec: 197-search-quality-eval
     # @regression
     vault = tmp_path / "ambig"
+    # Case-variant duplicate title: both earn the exact-title bonus, so the
+    # shorter body wins via length normalisation.
     long_body = ("lorem ipsum dolor sit amet " * 80) + "\n"
     _write(
         vault / "wiki" / "entities" / "Config.md",
@@ -181,7 +183,7 @@ def test_cli_lint_title_ambiguity_fires_on_crafted_defect(
     )
     _write(
         vault / "wiki" / "entities" / "Aaa.md",
-        "---\ntitle: Configuration Guide\ntype: entity\n---\n\nConfiguration\n",
+        "---\ntitle: configuration\ntype: entity\n---\n\nConfiguration\n",
     )
     args = _parse(
         "lint",

@@ -39,12 +39,23 @@ class MatchedPage:
     lines: tuple[tuple[int, str], ...]
 
 
+#: Added when the whole title equals the query (casefolded, trimmed) (#417).
+#: A page whose title merely contains the query earns at most the same
+#: title points (+100 phrase, +20 per token) plus a body score of at most
+#: ``(50 + 10 * tokens) / 8`` (the length factor floors at log2(256) = 8).
+#: 200 exceeds that body ceiling for any query under 155 tokens, so an
+#: exact-title page always outranks substring-title pages such as
+#: ``Cursor session 0`` for the query ``Cursor``.
+EXACT_TITLE_BONUS = 200.0
+
+
 def score_extract(page: ScannedPage, query: ExtractQuery) -> float:
-    """Length-normalised extract score (#418), arithmetic unchanged from MCP.
+    """Length-normalised extract score (#418) with an exact-title bonus (#417).
 
     Body: +50 whole-phrase, +10 per token, divided by
     ``log2(max(len(text), 256))``. Title: +100 phrase, +20 per token,
-    unnormalised.
+    plus :data:`EXACT_TITLE_BONUS` when the whole title equals the query;
+    title points are unnormalised.
     """
     body_score = 0
     if query.lower in page.text_lower:
@@ -62,6 +73,9 @@ def score_extract(page: ScannedPage, query: ExtractQuery) -> float:
         if query.lower in title:
             title_score += 100
         title_score += sum(20 for t in query.tokens if t in title)
+        # ``query.raw`` may be a collision-safe key (unique_title_queries), not the text.
+        if title.strip().casefold() == query.lower.strip().casefold():
+            title_score += EXACT_TITLE_BONUS
     return normalised_body + title_score
 
 
