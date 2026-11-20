@@ -109,6 +109,7 @@ def test_coding_standards_doc_names_floor_and_cli_layout() -> None:
     assert "fail_under = 87" in text
     assert "tests/cli/" in text
     assert "tests/render/" in text
+    assert "tests/mcp/" in text  # @spec: 415-mcp-tests-consolidate
 
 
 # @regression

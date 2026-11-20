@@ -10,6 +10,9 @@ session on the host machine.
 The fix: `_is_read_page_allowed(p)` allowlist of `wiki/raw/docs/
 examples/site/` directories + a few documented root files
 (README, CHANGELOG, CONTRIBUTING, LICENSE).
+
+# @spec: 415-mcp-tests-consolidate
+#316
 """
 
 from __future__ import annotations

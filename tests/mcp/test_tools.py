@@ -1,5 +1,9 @@
 """Tests for the enhanced MCP tools (v1.0, #159) and the merged
-``wiki_search`` (#102)."""
+``wiki_search`` (#102).
+
+# @spec: 415-mcp-tests-consolidate
+#316
+"""
 
 from __future__ import annotations
 

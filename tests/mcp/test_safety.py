@@ -10,6 +10,9 @@ These tests pin two properties that are easy to regress on:
    substring match by design, but no test guards against the
    refactor where someone replaces it with `path.join(...)`. Add
    coverage so a path-traversal regression fails loudly.
+
+# @spec: 415-mcp-tests-consolidate
+#316
 """
 
 from __future__ import annotations

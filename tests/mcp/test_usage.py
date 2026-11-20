@@ -3,6 +3,9 @@
 Collection is per-process append-only JSONL under ``<root>/usage/``,
 merged at read time; aggregation folds the records into totals and a
 kept-forever rollup so raw logs can be rotated.
+
+# @spec: 415-mcp-tests-consolidate
+#316
 """
 from __future__ import annotations
 

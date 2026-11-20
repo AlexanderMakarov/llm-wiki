@@ -9,6 +9,9 @@ on every call.
 The fix: `_read_capped(p, remaining_budget)` enforces a 4 MiB
 per-file cap and a 50 MiB aggregate budget per call. Oversize
 files are skipped entirely (no partial-read).
+
+# @spec: 415-mcp-tests-consolidate
+#316
 """
 
 from __future__ import annotations

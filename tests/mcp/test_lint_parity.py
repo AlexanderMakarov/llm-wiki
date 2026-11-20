@@ -12,6 +12,9 @@ vault, ``tool_wiki_health`` returns exactly the payload ``lint --json`` prints.
 Everything else here defends one way that equality could rot — an opt-out
 honoured on one route only, a threshold honoured on one route only, or an
 unrecognised rule name swallowed into a clean report.
+
+# @spec: 415-mcp-tests-consolidate
+#316
 """
 
 from __future__ import annotations

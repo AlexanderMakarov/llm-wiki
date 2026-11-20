@@ -13,7 +13,7 @@ Per-slice tests already cover the mechanics in detail:
     tests/test_all_min_refs.py        -- --min-refs on the `all` parser reaching the
                                           harvest and the lint stage, opt-out on that path
     tests/test_lint_determinism.py    -- byte-identical --json across processes/hash seeds
-    tests/test_mcp_lint_parity.py     -- wiki_lint == lint --json, one axis at a time
+    tests/mcp/test_lint_parity.py     -- wiki_lint == lint --json, one axis at a time
     tests/test_demo_gate.py           -- the committed demo's enforced gate, its one
                                           opt-out, a real warning still failing it
     tests/test_contradiction_filler.py-- boilerplate vs. real conflicting-claims wording
@@ -287,7 +287,7 @@ def _via_mcp(vault: Path, args: dict | None = None) -> dict:
 def test_mcp_and_cli_agree_with_an_opt_out_and_a_threshold_together(
     composed_vault: Path,
 ) -> None:
-    """Every per-slice parity test in test_mcp_lint_parity.py varies the
+    """Every per-slice parity test in tests/mcp/test_lint_parity.py varies the
     opt-out or the threshold alone. Real vaults set both; this proves
     neither route drops one when the other is also in play."""
     stock_cli = _via_cli(composed_vault)

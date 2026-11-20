@@ -2,17 +2,22 @@
 
 # @layer: integration
 # @spec: 273-mcp-wiki-add-cli-proxy
+# @spec: 415-mcp-tests-consolidate
+#316
 # @regression
 
-Per-slice suites (``test_add_doc.py``, ``tests/cli/``, ``test_mcp_wiki_add.py``)
+Per-slice suites (``test_add_doc.py``, ``tests/cli/``, ``tests/mcp/test_wiki_add.py``)
 already cover individual mechanics: piped provenance, chunking, CLI flag inversion,
-MCP registration and schema.
+MCP registration and schema. This file owns the protective checks for default
+raw+build/no-synth and synthesize opt-in MCP↔CLI parity (not duplicated in
+``test_wiki_add.py``); ``test_wiki_add`` keeps timeout/poll, lock-holder, and
+#307 synthesize provenance.
 
 This file drives the acceptance criteria from the functional spec as a whole,
 checking properties that only hold once every slice is wired together:
 
 * MCP Add and CLI add produce identical provenance for the same input mode
-* Long ``content`` via MCP → multiple raw chunks, all with ``source: piped``
+* Long ``content`` via MCP → one whole raw file with ``source: piped``
 * URL route records the exact URL as source, never a temp path
 * Default invocation (no flags): raw written, site rebuilt, no synth
 * ``no_build=True`` with no synthesize still runs ``refresh_synth_pending`` bookkeeping
