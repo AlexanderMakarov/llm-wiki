@@ -27,9 +27,8 @@
 ## local-review
 - Review file: `review.md` (session-only, not committed). Verdict: Request changes (1 Blocker, 3 Nits).
 - keep/drop: **keep all** (operator). Applied: delete B1 inventory tests; narrow docstring AC (N1); placeholder paths in this log (N2); commit/PR reminders for Step 9 (N3).
-- Root cause of B1 (third recurrence): Slice 4 task wording copied from `415-mcp-tests-consolidate/tasks.md` (“optionally assert flat … originals are gone”) overrode `testing-expert` / CODING_STANDARDS. #416 omitted that phrase and stayed clean. Follow-up: harden CODING_STANDARDS + testing-expert + skill so tasks.md cannot reintroduce it.
+- B1 cause: this ticket’s Slice 4 task line asked for flat-gone inventory asserts (copied from an older completed tasks.md). Fix: remove that ask; one-line clarify in `testing-expert` that task text does not authorize inventory tests.
 
 ## commit-push
 - Issue link keyword: `Closes #318` — issue owns only this one synth unit-test mirror pass; all in-scope ACs delivered (stay-put/overview and ollama explicitly out of issue scope).
-- Review keep-all applied; B1 inventory tests removed; skill `test-layout-mirror` + CODING_STANDARDS / testing-expert hardened against the #415 Slice 4 copy-paste root cause.
 - Next: push → open PR → remote gates (stop appending this log after PR opens)
