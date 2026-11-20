@@ -27,7 +27,7 @@
 ## local-review
 - Review file: `review.md` (session-only, not committed). Verdict: Request changes (1 Blocker, 3 Nits).
 - keep/drop: **keep all** (operator). Applied: delete B1 inventory tests; narrow docstring AC (N1); placeholder paths in this log (N2); commit/PR reminders for Step 9 (N3).
-- B1 cause: this ticket’s Slice 4 task line asked for flat-gone inventory asserts (copied from an older completed tasks.md). Fix: remove that ask; one-line clarify in `testing-expert` that task text does not authorize inventory tests.
+- B1 cause: this ticket’s Slice 4 task line asked for flat-gone inventory asserts (copied from an older completed tasks.md). Fix: remove that ask; CODING_STANDARDS says not to write task wording that asks for inventory asserts.
 
 ## commit-push
 - Issue link keyword: `Closes #318` — issue owns only this one synth unit-test mirror pass; all in-scope ACs delivered (stay-put/overview and ollama explicitly out of issue scope).
