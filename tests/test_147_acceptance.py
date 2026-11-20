@@ -11,14 +11,14 @@ only re-assert a slice module are omitted — the matrix points at them instead.
 AC coverage matrix (FR<n>-AC<m>, functional-spec.md bullet order):
 
     FR1-AC1  → test_full_loop_dummy_synth_harvest_promote_shared_thing   [headline]
-    FR1-AC2  → covered by tests/test_synth_pipeline.py
+    FR1-AC2  → covered by tests/synth/test_pipeline.py
                ::test_llm_synth_runs_prepare_known_names_once_before_pages
                (frozen vocab prefix carries SharedTopic into every job-2 prompt)
     FR1-AC3  → test_fr1_empty_topics_still_summarise_without_inventing_names
     FR1-neg  → test_fr1_invalid_kind_is_not_classified_and_needs_rewrite
-    FR2-AC1  → covered by tests/test_synth_pipeline.py
+    FR2-AC1  → covered by tests/synth/test_pipeline.py
                ::test_connections_only_page_queued_for_topics_rewrite
-    FR2-AC2  → covered by tests/test_synth_pipeline.py
+    FR2-AC2  → covered by tests/synth/test_pipeline.py
                ::test_parseable_kind_page_skipped_when_mtime_current
     FR3-AC1  → test_full_loop_dummy_synth_harvest_promote_shared_thing
                (+ tests/test_candidates_harvest.py
@@ -36,21 +36,21 @@ AC coverage matrix (FR<n>-AC<m>, functional-spec.md bullet order):
     FR4-AC3  → test_fr4_promote_never_calls_synthesize_key_facts_or_mention_clip
                (+ tests/test_candidates.py
                ::test_promote_does_not_call_synthesize_or_mention_helpers)
-    FR5-AC1  → covered by tests/test_synth_pipeline.py
+    FR5-AC1  → covered by tests/synth/test_pipeline.py
                ::test_llm_synth_runs_prepare_known_names_once_before_pages
     FR5-AC2  → covered by tests/test_topics.py
                ::test_prepare_known_names_calls_llm_once_and_caches
     FR5-AC3  → covered by FR5-AC1 (job 1 re-runs on next synthesize_new_sessions)
-    FR5-AC4  → covered by tests/test_synth_parallel.py
+    FR5-AC4  → covered by tests/synth/test_parallel.py
                ::test_an_interrupt_records_the_pages_that_reached_disk
-    FR5-AC5  → covered by tests/test_synth_pipeline.py
+    FR5-AC5  → covered by tests/synth/test_pipeline.py
                ::test_dummy_synth_does_not_call_job1_prepare_known_names
                (+ tests/test_topics.py
                ::test_prepare_known_names_skips_non_llm_backend)
-    FR6-AC1  → covered by tests/test_synth_run_summary.py
+    FR6-AC1  → covered by tests/synth/test_run_summary.py
                ::test_interrupted_synth_harvests_then_exits_130
                ::test_interrupted_sources_only_prints_candidates_only_hint
-    FR6-AC2  → covered by tests/test_synth_parallel.py
+    FR6-AC2  → covered by tests/synth/test_parallel.py
                ::test_an_interrupt_records_the_pages_that_reached_disk
     FR6-AC3  → covered by tests/test_state_widget.py
                ::test_build_refreshes_pipeline_on_disk_mismatch
@@ -61,11 +61,11 @@ AC coverage matrix (FR<n>-AC<m>, functional-spec.md bullet order):
     FR8-AC1  → test_full_loop_dummy_synth_harvest_promote_shared_thing
     FR8-AC2  → test_fr8_description_not_rewritten_when_more_facts_arrive
     FR8-AC3  → out of scope (#148); merge still concatenates — no LLM rewrite added
-    FR9-AC1  → covered by tests/test_synth_run_summary.py
+    FR9-AC1  → covered by tests/synth/test_run_summary.py
                ::test_run_start_line_precedes_first_page_line
-    FR9-AC2  → covered by tests/test_synth_run_summary.py interrupt tests +
-               tests/test_synth_parallel.py interrupt drain
-    FR9-AC3  → covered by tests/test_synth_parallel.py
+    FR9-AC2  → covered by tests/synth/test_run_summary.py interrupt tests +
+               tests/synth/test_parallel.py interrupt drain
+    FR9-AC3  → covered by tests/synth/test_parallel.py
                ::test_one_failing_source_does_not_stop_the_batch
     FR10-AC1 → test_fr10_changelog_unreleased_describes_offline_promote_and_retirement
     FR10-AC2 → covered by docs (asserted via CHANGELOG + agent-kit greps;
@@ -406,7 +406,7 @@ def test_fr8_description_not_rewritten_when_more_facts_arrive(tmp_path: Path) ->
 
 
 # ─── FR5 spy (whole-feature call counts) — cite if identical; keep one here? ─
-# Covered by test_synth_pipeline.py::test_llm_synth_runs_prepare_known_names_once_before_pages.
+# Covered by tests/synth/test_pipeline.py::test_llm_synth_runs_prepare_known_names_once_before_pages.
 # Do not duplicate.
 
 

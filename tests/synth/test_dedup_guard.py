@@ -12,6 +12,8 @@ same raw file (#37). These tests cover the dedup guard:
 * ``--force`` still re-synthesizes past a real page;
 * every skipped source is reported by ONE summary line pointing at
   ``migrate source-page-paths`` (#265), not one line per source.
+
+# @spec: 417-synth-tests-consolidate
 """
 from __future__ import annotations
 

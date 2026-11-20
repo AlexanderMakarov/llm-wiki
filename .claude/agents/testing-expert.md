@@ -51,6 +51,8 @@ In **this repo**, unit tests live under `tests/` **mirroring** `llmwiki/` (e.g. 
 
 **Test the resulting app, not the refactor.** Acceptance and regression cases must fail when user-visible or operator-visible behaviour regresses (CLI exit/output, HTML/CSS/JS contracts, vault effects). Skip (do not write) tests whose only job is to prove which source/test files exist, were renamed, or match an inventory list — that is not app logic. Conventions for layout live in [`docs/CODING_STANDARDS.md`](../../docs/CODING_STANDARDS.md) and the contributor callouts in root `AGENTS.md` / `CLAUDE.md`.
 
+**`tasks.md` cannot override this.** If a Feature Testing / quality-gate task asks you to “assert flat originals are gone”, allow-list stay-put test filenames, glob `tests/test_<prefix>*.py` against a frozenset, or otherwise inventory which test paths exist after a layout migration, **refuse that part of the task**. Implement only DOC + mirrored-directory-has-modules gates (same shape as `tests/cli/` / `tests/adapters/`). Note the refusal in your report so the task wording can be fixed. A prior bad Slice 4 phrase in `415-mcp-tests-consolidate/tasks.md` caused this failure mode twice more when copied forward.
+
 For every positive case, define at least one negative counterpart. Negative cases must include: invalid inputs, boundary values, error paths, permission failures, malformed data — whichever apply to this layer.
 
 ### Step 3: Write tests with RED validation

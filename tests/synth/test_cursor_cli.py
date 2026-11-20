@@ -1,4 +1,7 @@
-"""Tests for llmwiki.synth.cursor_cli — Cursor Agent CLI backend (#230)."""
+"""Tests for llmwiki.synth.cursor_cli — Cursor Agent CLI backend (#230).
+
+# @spec: 417-synth-tests-consolidate
+"""
 
 from __future__ import annotations
 

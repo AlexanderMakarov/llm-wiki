@@ -1,4 +1,7 @@
-"""Tests for ``llmwiki synth --path`` (#62)."""
+"""Tests for ``llmwiki synth --path`` (#62).
+
+# @spec: 417-synth-tests-consolidate
+"""
 
 from __future__ import annotations
 

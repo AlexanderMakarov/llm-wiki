@@ -1,6 +1,8 @@
 """Shared synthesis-backend contracts (#230) — parametrized across engines.
 
 Backend-specific transport (Claude lean/JSON, Cursor allowlist/PATH probe, Ollama HTTP retries) stays in the per-backend test modules. This file covers resolve_backend wiring, shared-timeout isolation, overview soft-fail / skip behaviour, and the usable-body budget API (#311 / @spec: 324-whole-document-storage). CLI ``synth --backend`` handler tests live in ``tests/cli/test_synth.py``.
+
+# @spec: 417-synth-tests-consolidate
 """
 
 from __future__ import annotations

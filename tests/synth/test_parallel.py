@@ -7,13 +7,17 @@ Grouped by slice so later slices can append their own sections:
 * concurrency setting — how the worker count is resolved from config, from
   the ``--concurrency`` flag, and from neither.
 * parallel execution — pages genuinely overlap, and a parallel run produces
-  exactly what a sequential one does.
+  exactly what a sequential one does. The operator-visible worker bound,
+  progress positions, and stub protection under ``--force``/``--concurrency``
+  are asserted once, over the CLI, in ``test_parallel_acceptance.py``.
 * abandoned drains — an interrupt or any other escape stops the queue and
   still accounts for the pages that reached disk.
 
 The ``claude`` CLI is never launched: the backend's child-process runner is
 replaced with an in-process stub, so there is no CLI invocation and no
 network.
+
+# @spec: 417-synth-tests-consolidate
 """
 
 from __future__ import annotations
@@ -442,27 +446,6 @@ class _BarrierBackend(_RealPageBackend):
         return super().synthesize_source_page(raw_body, meta, prompt_template)
 
 
-class _TrackingBackend(_RealPageBackend):
-    """Records the high-water mark of calls running at the same time."""
-
-    def __init__(self, hold_s: float = 0.02) -> None:
-        self._lock = threading.Lock()
-        self._live = 0
-        self._hold_s = hold_s
-        self.peak = 0
-
-    def synthesize_source_page(self, raw_body, meta, prompt_template):  # noqa: D102
-        with self._lock:
-            self._live += 1
-            self.peak = max(self.peak, self._live)
-        try:
-            time.sleep(self._hold_s)
-            return super().synthesize_source_page(raw_body, meta, prompt_template)
-        finally:
-            with self._lock:
-                self._live -= 1
-
-
 class _FlakyBackend(_RealPageBackend):
     """Refuses the named slugs and synthesizes everything else."""
 
@@ -497,25 +480,6 @@ def test_pages_do_not_overlap_at_concurrency_one(tmp_path: Path) -> None:
     assert len(summary["errors"]) == 2
 
 
-def test_in_flight_pages_stay_within_the_worker_count(tmp_path: Path) -> None:
-    """Peak overlap rises with the setting and is exactly one when it is one."""
-    slugs = tuple(f"doc{i:02d}" for i in range(6))
-
-    parallel = _TrackingBackend()
-    vault = _mk_vault(tmp_path / "parallel")
-    _seed_docs(vault, slugs)
-    _run_synth(vault, parallel, concurrency=4)
-
-    serial = _TrackingBackend()
-    vault = _mk_vault(tmp_path / "serial")
-    _seed_docs(vault, slugs)
-    _run_synth(vault, serial, concurrency=1)
-
-    assert parallel.peak > 1
-    assert parallel.peak <= 4
-    assert serial.peak == 1
-
-
 def test_a_parallel_run_matches_a_sequential_one(tmp_path: Path) -> None:
     """The guarantee the whole change rests on: only speed differs.
 
@@ -542,21 +506,6 @@ def test_a_parallel_run_matches_a_sequential_one(tmp_path: Path) -> None:
     assert parallel_log == serial_log
 
 
-def test_every_result_line_carries_its_position(tmp_path: Path, capsys) -> None:
-    """Positions count completed sources and end at the announced total."""
-    vault = _mk_vault(tmp_path)
-    slugs = tuple(f"doc{i:02d}" for i in range(5))
-    _seed_docs(vault, slugs)
-
-    _run_synth(vault, _RealPageBackend(), concurrency=3)
-
-    out = capsys.readouterr().out
-    positions = [int(n) for n in re.findall(r"(?m)^  \[(\d+)/5\] synthesized: ", out)]
-    # Completion order is not deterministic above one worker, so compare the
-    # set of positions rather than the sequence they arrived in.
-    assert sorted(positions) == [1, 2, 3, 4, 5]
-
-
 def test_one_failing_source_does_not_stop_the_batch(
     tmp_path: Path, capsys
 ) -> None:
@@ -575,22 +524,6 @@ def test_one_failing_source_does_not_stop_the_batch(
     files = json.loads((vault / "state.json").read_text(encoding="utf-8"))["synth"]["files"]
     assert len(files) == 2
     assert not any("beta" in key for key in files)
-
-
-def test_a_placeholder_never_replaces_a_real_page_under_concurrency(
-    tmp_path: Path,
-) -> None:
-    """Stub protection survives the move onto worker threads."""
-    vault = _mk_vault(tmp_path)
-    _seed_docs(vault, ("alpha", "beta"))
-    _run_synth(vault, _RealPageBackend(), concurrency=2)
-    before = _pages(vault)
-    assert before
-
-    summary = _run_synth(vault, DummySynthesizer(), concurrency=2, force=True)
-
-    assert summary["protected"] == len(before)
-    assert _pages(vault) == before
 
 
 def test_the_run_appends_exactly_one_log_entry(tmp_path: Path) -> None:
