@@ -5,7 +5,7 @@
 # @regression
 
 Slice tests (``test_exclude_headless*.py``, ``test_cursor_cli_exclude_headless.py``,
-``test_adapter_exclude_headless_slice3.py``, ``test_adapter_is_headless_contract.py``,
+``tests/adapters/test_exclude_headless.py``, ``tests/adapters/test_is_headless_contract.py``,
 ``test_docs_adapter_currency.py``) cover per-adapter rules and docs currency. This
 file verifies the feature **as a whole** against functional-spec.md R1–R6.
 
@@ -28,7 +28,7 @@ AC coverage matrix:
     R6   synth skips cursor headless in raw    -> test_synthesize_skips_cursor_headless_already_in_raw
 
 Contract (every adapter defines ``is_headless_session``):
-    covered by test_adapter_is_headless_contract.py
+    covered by tests/adapters/test_is_headless_contract.py
 """
 
 from __future__ import annotations

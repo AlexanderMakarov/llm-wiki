@@ -8,6 +8,8 @@ chip on the compiled site.
 After: the tag mirrors the calling adapter's registry name, normalised
 from ``claude_code`` / ``codex_cli`` style to ``claude-code`` /
 ``codex-cli``.
+
+# @spec: 416-adapter-tests-consolidate (#317)
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ from llmwiki.convert import DEFAULT_CONFIG, Redactor, _adapter_tag, render_sessi
     ("  codex_cli  ", "codex-cli"),
 ])
 def test_adapter_tag_normalisation(adapter, expected):
+    """Registry adapter names normalise to hyphenated frontmatter tags."""
     assert _adapter_tag(adapter) == expected
 
 

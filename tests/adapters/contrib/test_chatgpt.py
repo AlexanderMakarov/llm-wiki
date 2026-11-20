@@ -1,4 +1,7 @@
-"""Tests for the ChatGPT conversation-export adapter (v1.1, #44)."""
+"""Tests for the ChatGPT conversation-export adapter (v1.1, #44).
+
+# @spec: 416-adapter-tests-consolidate (#317)
+"""
 
 from __future__ import annotations
 
@@ -199,9 +202,8 @@ def test_fmt_ts_invalid():
 
 
 def test_render_has_frontmatter():
-    session = parse_conversations_json(
-        _write_export(Path(__file__).parent.parent / "tmp-chat") / "conversations.json"
-    ) if False else {
+    """Rendered ChatGPT markdown starts with frontmatter and chatgpt tags."""
+    session = {
         "title": "Test",
         "created": 1730246400.0,
         "updated": None,

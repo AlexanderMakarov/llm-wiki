@@ -121,7 +121,7 @@ export COPILOT_HOME=~/.copilot-custom
 
 ```bash
 python3 -m llmwiki adapters      # should list copilot_chat and copilot_cli
-python3 -m pytest tests/test_copilot_adapters.py -v
+python3 -m pytest tests/adapters/contrib/test_copilot.py -v
 ```
 
 ## Reference

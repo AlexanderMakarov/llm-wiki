@@ -1,4 +1,7 @@
-"""Cursor IDE adapter (#2) — discover / load / normalize / archived."""
+"""Cursor IDE adapter (#2) — discover / load / normalize / archived.
+
+# @spec: 416-adapter-tests-consolidate (#317)
+"""
 
 from __future__ import annotations
 

@@ -7,6 +7,8 @@ ever implemented `convert_pdf`. README + docs both advertised
 'AttributeError' lines in the quarantine.
 
 This test file is the CI guard against the phantom returning.
+
+# @spec: 416-adapter-tests-consolidate (#317)
 """
 
 from __future__ import annotations

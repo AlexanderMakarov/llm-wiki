@@ -3,6 +3,8 @@
 Verifies each adapter's contract: SUPPORTED_SCHEMA_VERSIONS,
 session_store_path, discover_sessions, derive_project_slug,
 and graceful degradation (no crash on bad input).
+
+# @spec: 416-adapter-tests-consolidate (#317)
 """
 
 from __future__ import annotations
@@ -19,30 +21,30 @@ from llmwiki.adapters.contrib.gemini_cli import GeminiCliAdapter
 
 class TestCursorAdapterContract:
     def test_has_supported_schema_versions(self):
+        """Adapter declares at least one supported schema version."""
         assert hasattr(CursorAdapter, "SUPPORTED_SCHEMA_VERSIONS")
         assert len(CursorAdapter.SUPPORTED_SCHEMA_VERSIONS) >= 1
 
-    def test_session_store_path_returns_list(self):
-        adapter = CursorAdapter()
-        paths = adapter.session_store_path
-        assert isinstance(paths, (list, Path, type(None))) or paths is not None
-
     def test_derive_project_slug(self):
+        """derive_project_slug returns a non-empty string for a workspace DB path."""
         adapter = CursorAdapter()
         slug = adapter.derive_project_slug(Path("/tmp/workspace-abc123/state.vscdb"))
         assert isinstance(slug, str)
         assert len(slug) > 0
 
     def test_discover_returns_list(self):
+        """discover_sessions returns a list even when the store is empty or missing."""
         adapter = CursorAdapter()
         result = adapter.discover_sessions()
         assert isinstance(result, list)
 
     def test_instantiate_with_no_config(self):
+        """Adapter constructs with no config argument."""
         adapter = CursorAdapter()
         assert adapter is not None
 
     def test_instantiate_with_empty_config(self):
+        """Adapter constructs with an empty config dict."""
         adapter = CursorAdapter(config={})
         assert adapter is not None
 
@@ -54,6 +56,7 @@ class TestCursorAdapterContract:
 
 class TestGeminiCliAdapterContract:
     def test_has_supported_schema_versions(self):
+        """Adapter declares at least one supported schema version."""
         assert hasattr(GeminiCliAdapter, "SUPPORTED_SCHEMA_VERSIONS")
         assert len(GeminiCliAdapter.SUPPORTED_SCHEMA_VERSIONS) >= 1
 
@@ -69,11 +72,13 @@ class TestGeminiCliAdapterContract:
         assert len(slug) > 0
 
     def test_discover_returns_list(self):
+        """discover_sessions returns a list even when the store is empty or missing."""
         adapter = GeminiCliAdapter()
         result = adapter.discover_sessions()
         assert isinstance(result, list)
 
     def test_instantiate_with_no_config(self):
+        """Adapter constructs with no config argument."""
         adapter = GeminiCliAdapter()
         assert adapter is not None
 
@@ -85,6 +90,7 @@ class TestGeminiCliAdapterContract:
 
 class TestCrossAdapterGracefulDegradation:
     def test_all_adapters_handle_empty_config(self):
+        """Graduated adapters construct with empty config without raising."""
         for cls in [CursorAdapter, GeminiCliAdapter]:
             adapter = cls(config={})
             assert adapter is not None

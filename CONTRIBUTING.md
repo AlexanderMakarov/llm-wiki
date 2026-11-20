@@ -201,7 +201,7 @@ See [docs/framework.md §5.25 Adapter Flow](docs/framework.md) for the full cont
 
 3. **One snapshot test** under `tests/snapshots/<agent>/minimal.md` — the expected markdown output.
 
-4. **One test** under `tests/test_<agent>_adapter.py` that runs the converter against the fixture and diffs against the snapshot.
+4. **One test** under `tests/adapters/` (core) or `tests/adapters/contrib/` (contrib) that runs the converter against the fixture and diffs against the snapshot.
 
 5. **One documentation page** at `docs/adapters/<agent>.md`.
 

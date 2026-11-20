@@ -1,4 +1,7 @@
-"""Tests for adapter config validation (v1.0, #177)."""
+"""Tests for adapter config validation (v1.0, #177).
+
+# @spec: 416-adapter-tests-consolidate (#317)
+"""
 
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ from llmwiki.adapter_config import (
 
 
 def test_adapter_schemas_defined():
+    """Known adapter config schemas are defined for validation."""
     assert set(ADAPTER_SCHEMAS.keys()) == {"web_clipper"}
 
 

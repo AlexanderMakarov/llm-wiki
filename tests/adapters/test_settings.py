@@ -1,4 +1,7 @@
-"""Tests for adapter config resolution and sync selection (#182)."""
+"""Tests for adapter config resolution and sync selection (#182).
+
+# @spec: 416-adapter-tests-consolidate (#317)
+"""
 
 from __future__ import annotations
 

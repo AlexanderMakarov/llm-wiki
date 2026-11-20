@@ -1,4 +1,7 @@
-"""Tests for the adapter registry."""
+"""Tests for the adapter registry.
+
+# @spec: 416-adapter-tests-consolidate (#317)
+"""
 
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ from llmwiki.adapters.contrib.obsidian import ObsidianAdapter
 
 
 def test_registry_discovers_all_adapters():
+    """discover_all populates REGISTRY with core and contrib adapters plus aliases."""
     discover_all()
     assert "claude_code" in REGISTRY
     assert "codex_cli" in REGISTRY
@@ -36,6 +40,7 @@ def test_registry_discovers_all_adapters():
 
 
 def test_all_adapters_subclass_base():
+    """Concrete registered adapters subclass BaseAdapter."""
     assert issubclass(ClaudeCodeAdapter, BaseAdapter)
     assert issubclass(CodexCliAdapter, BaseAdapter)
     assert issubclass(CopilotChatAdapter, BaseAdapter)
@@ -50,6 +55,7 @@ def test_all_adapters_have_name():
     # ``cls.name`` (e.g. ``copilot-chat`` aliases the canonical
     # ``copilot_chat``). Walk the unique classes once instead of asserting
     # every key matches ``cls.name``.
+    """Each REGISTRY entry exposes a non-empty adapter name."""
     discover_all()
     seen: set[type] = set()
     for cls in REGISTRY.values():
@@ -65,6 +71,7 @@ def test_all_adapters_have_name():
 
 
 def test_all_adapters_have_description():
+    """Each REGISTRY entry exposes a non-empty description."""
     discover_all()
     for cls in REGISTRY.values():
         desc = cls.description()
@@ -88,6 +95,7 @@ def test_claude_code_project_slug_stripping():
 
 def test_claude_code_project_slug_fallback():
 
+    """Claude Code derive_project_slug falls back when path layout is unexpected."""
     adapter = ClaudeCodeAdapter()
     # Path that doesn't match the expected pattern
     p = adapter.session_store_path / "random-project" / "s.jsonl"

@@ -1,4 +1,7 @@
-"""Tests for the OpenClaw + Cursor-CLI adapters and the load_records hook."""
+"""Tests for the OpenClaw + Cursor-CLI adapters and the load_records hook.
+
+# @spec: 416-adapter-tests-consolidate (#317)
+"""
 
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ from tests.settings_sandbox import SettingsSandbox
 
 
 def test_adapters_register():
+    """OpenClaw and Cursor CLI adapters register under their canonical names."""
     discover_all()
     assert "openclaw" in REGISTRY
     assert "cursor_cli" in REGISTRY
