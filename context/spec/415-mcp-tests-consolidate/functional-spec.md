@@ -21,8 +21,8 @@ Success: after this lands, the meaningful unit coverage for that area lives unde
 Unit tests that exist to protect MCP server / tool behaviour are consolidated into a `tests/mcp/` tree (or equivalently named mirror of the MCP product package), grouped to match MCP concerns where that mapping is practical.
 
 - **Acceptance Criteria:**
-  - [x] Given a maintainer opens the tests tree after this change, when they look for MCP unit coverage from this batch, then those cases live under the mirrored MCP tests tree rather than only as a flat root pile for that batch. — evidence: 10 `tests/mcp/test_*.py`; flat `tests/test_mcp_*.py` absent; `test_mcp_unit_tests_live_under_mirrored_mcp_package` (dir + modules; no suite inventory of flat filenames).
-  - [x] Given a new contributor adds a unit check for a surface already covered by this batch, when they follow coding standards, then the natural place to extend is a module under that mirrored tree. — evidence: `docs/CODING_STANDARDS.md` names `tests/mcp/`; quality-gate DOC assert.
+  - [x] Given a maintainer opens the tests tree after this change, when they look for MCP unit coverage from this batch, then those cases live under the mirrored MCP tests tree rather than only as a flat root pile for that batch. — evidence: 10 `tests/mcp/test_*.py`; flat `tests/test_mcp_*.py` absent; layout enforced in review + CODING_STANDARDS DOC naming (no suite inventory of which test files exist).
+  - [x] Given a new contributor adds a unit check for a surface already covered by this batch, when they follow coding standards, then the natural place to extend is a module under that mirrored tree. — evidence: `docs/CODING_STANDARDS.md` names `tests/mcp/`; `test_coding_standards_doc_names_floor_and_cli_layout` DOC assert.
 
 ### 2.2 Behaviour and CI contracts preserved
 
