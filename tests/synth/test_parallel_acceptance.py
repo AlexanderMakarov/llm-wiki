@@ -4,8 +4,8 @@
 # @spec: 005-synth-parallel-and-batch-count
 # @regression
 
-``tests/test_synth_parallel.py`` (backend thread-safety, concurrency resolution,
-CLI flag validation) and ``tests/test_synth_run_summary.py`` (start-line
+``tests/synth/test_parallel.py`` (backend thread-safety, concurrency resolution,
+CLI flag validation) and ``tests/synth/test_run_summary.py`` (start-line
 content, position formatting, failure isolation, stub protection, log/index
 gating) already give this feature thorough **unit** coverage — but almost
 every one of those tests drives ``synthesize_new_sessions`` directly, or
@@ -32,7 +32,7 @@ AC coverage matrix (functional-spec.md FR1-FR6; 24 acceptance criteria):
     FR3.3 saved pref used, no flag given         -> test_saved_preference_is_used_and_enforced_without_a_flag
     FR3.4 flag wins over saved pref              -> test_flag_overrides_the_saved_preference
     FR3.5 concurrency=1 is strictly sequential   -> test_concurrency_one_runs_strictly_sequentially
-    FR3.6 out-of-range/non-integer -> clear msg  -> already CLI-level: test_synth_parallel.py::
+    FR3.6 out-of-range/non-integer -> clear msg  -> already CLI-level: tests/synth/test_parallel.py::
                                                      test_cli_refuses_an_out_of_range_concurrency /
                                                      test_cli_rejects_a_non_integer_concurrency — not duplicated
     FR4.1 result line shows completed/total      -> test_progress_positions_count_completions_and_end_at_batch_total
@@ -47,9 +47,9 @@ AC coverage matrix (functional-spec.md FR1-FR6; 24 acceptance criteria):
                                                                          breakdown is unreachable through cmd_synthesize
                                                                          without writing into the real repo, see
                                                                          _isolate_synth_log; already covered at the pipeline
-                                                                         layer by test_synth_parallel.py::
+                                                                         layer by tests/synth/test_parallel.py::
                                                                          test_a_parallel_run_matches_a_sequential_one)
-    FR6.1 help text names the option + default   -> already CLI-level: test_synth_parallel.py::
+    FR6.1 help text names the option + default   -> already CLI-level: tests/synth/test_parallel.py::
                                                      test_help_names_the_default_and_the_range — not duplicated
     FR6.2 CLI reference doc lists option + default -> test_cli_reference_documents_the_concurrency_flag
     FR6.3 release notes describe the change      -> test_changelog_unreleased_section_describes_the_change
@@ -63,6 +63,8 @@ pipeline run" / "`all --with-synth` reads config only (no flag)"):
 And composition, called out explicitly for this slice:
 
     test_sources_only_force_concurrency_and_vault_compose
+
+# @spec: 417-synth-tests-consolidate
 """
 
 from __future__ import annotations
@@ -84,9 +86,8 @@ from llmwiki import pipeline as pipeline_mod
 from llmwiki.cli import build_parser, cmd_synthesize
 from llmwiki.synth import pipeline as synth_pipeline
 from llmwiki.synth.base import DummySynthesizer
+from tests._paths import REPO_ROOT
 from tests.changelog_notes import shipping_section_text
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 _START_LINE = re.compile(
     r"(?m)^Synthesizing (\d+) source\(s\) with (\S+) \((\d+) at a time\)$"
@@ -374,7 +375,7 @@ def test_parallel_and_sequential_cli_runs_produce_identical_results(
     CLI's own printed summary — not just the pipeline's return dict. Same
     corpus, same backend, concurrency 1 vs 4: identical pages and identical
     ``Scanned``/``Synthesized:`` lines. (The log entry's own equivalence is
-    covered at the pipeline layer in test_synth_parallel.py — ``cmd_synthesize``
+    covered at the pipeline layer in tests/synth/test_parallel.py — ``cmd_synthesize``
     does not forward a vault-scoped log path, see ``_isolate_synth_log``
     above, so it has nothing to compare here without touching the real repo.)
     """
@@ -645,7 +646,7 @@ def test_harvest_and_end_of_run_accounting_match_a_real_parallel_run(
     line matches the pages actually on disk — proven against a real
     ``--concurrency 3`` run, not a mocked one. (The log entry's own producer
     breakdown is covered at the pipeline layer in
-    ``test_synth_parallel.py::test_a_parallel_run_matches_a_sequential_one``;
+    ``tests/synth/test_parallel.py::test_a_parallel_run_matches_a_sequential_one``;
     see ``_isolate_synth_log`` above for why this file cannot check it
     through ``cmd_synthesize`` without touching the real repo.)"""
     vault = _mk_vault(tmp_path)

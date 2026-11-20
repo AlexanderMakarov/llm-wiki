@@ -3,6 +3,7 @@
 # @layer: unit
 # @spec: 280-shrink-test-suite
 # @spec: 416-adapter-tests-consolidate
+# @spec: 417-synth-tests-consolidate
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ TESTS_DIR = REPO_ROOT / "tests"
 CLI_TESTS = TESTS_DIR / "cli"
 ADAPTER_TESTS = TESTS_DIR / "adapters"
 ADAPTER_CONTRIB_TESTS = ADAPTER_TESTS / "contrib"
+SYNTH_TESTS = TESTS_DIR / "synth"
 
 
 def _mirrored_test_package_has_modules(pkg: Path) -> None:
@@ -121,6 +123,7 @@ def test_coding_standards_doc_names_floor_and_cli_layout() -> None:
     assert "tests/render/" in text
     assert "tests/mcp/" in text  # @spec: 415-mcp-tests-consolidate
     assert "tests/adapters/" in text  # @spec: 416-adapter-tests-consolidate
+    assert "tests/synth/" in text  # @spec: 417-synth-tests-consolidate
 
 
 # @regression
@@ -143,6 +146,13 @@ def test_adapter_contrib_unit_tests_live_under_contrib_dir() -> None:
     """Contrib adapter unit coverage lives under ``tests/adapters/contrib/`` with ``test_*.py`` modules."""
     _mirrored_test_dir_has_modules(ADAPTER_CONTRIB_TESTS)
     assert not (ADAPTER_CONTRIB_TESTS / "__init__.py").exists()
+
+
+# @regression
+# @spec: 417-synth-tests-consolidate
+def test_synth_unit_tests_live_under_mirrored_synth_package() -> None:
+    """Synth unit coverage lives under ``tests/synth/`` as a package with ``test_*.py`` modules."""
+    _mirrored_test_package_has_modules(SYNTH_TESTS)
 
 
 # @regression

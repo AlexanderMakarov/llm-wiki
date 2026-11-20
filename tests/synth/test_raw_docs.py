@@ -13,6 +13,8 @@ wiki — synthesis only ever walked ``raw/sessions/``. These tests cover:
 * Provenance (#307) — a doc page claims ``source_file: raw/docs/<rel>`` and is
   tagged as a document, never as a session transcript; that claim is what makes
   a repeated synthesis recognise the page instead of duplicating it.
+
+# @spec: 417-synth-tests-consolidate
 """
 
 from __future__ import annotations

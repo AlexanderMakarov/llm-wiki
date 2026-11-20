@@ -6,6 +6,8 @@ backend, the knowledge graph silently loses its edges — this happened
 to a 1,000-page corpus in one ``--force`` run with an unconfigured
 backend. ``synthesize_new_sessions`` therefore refuses the downgrade,
 even under ``--force``, and reports it via ``summary["protected"]``.
+
+# @spec: 417-synth-tests-consolidate
 """
 from __future__ import annotations
 

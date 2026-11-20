@@ -4,6 +4,8 @@ Covers ``print_synth_run_summary`` via ``cmd_synthesize`` on a tmp vault
 (#113 Slice 2) and ``print_synth_run_start`` — the batch-size line printed
 before the first page result — via ``synthesize_new_sessions`` (#118).
 Synthesis backends are faked — no Claude/Ollama network calls.
+
+# @spec: 417-synth-tests-consolidate
 """
 
 from __future__ import annotations

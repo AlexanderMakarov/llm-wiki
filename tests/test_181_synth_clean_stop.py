@@ -42,10 +42,10 @@ from llmwiki.synth.child_processes import TrackedChildren
 from llmwiki.synth.claude_cli import ClaudeCLIError, ClaudeCLISynthesizer
 from llmwiki.synth.cursor_cli import CursorCLIError, CursorCLISynthesizer
 from llmwiki.synth.ollama import OllamaConfig, OllamaHTTPError, OllamaSynthesizer
-from tests import test_synth_claude_cli as claude_tests
-from tests import test_synth_parallel as parallel_tests
-from tests import test_synth_run_summary as summary_tests
 from tests import test_topics as topics_tests
+from tests.synth import test_claude_cli as claude_tests
+from tests.synth import test_parallel as parallel_tests
+from tests.synth import test_run_summary as summary_tests
 
 _RESET = "1:20pm (Etc/UTC)"
 _LIMIT_TEXT = f"You've hit your session limit · resets {_RESET}"

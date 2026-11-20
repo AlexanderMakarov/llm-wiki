@@ -5,15 +5,15 @@
 # @regression
 
 Maps every acceptance criterion in functional-spec.md to at least one test.
-Tests in test_synthesize_estimate.py and test_state_widget.py already cover
+Tests in tests/synth/test_estimate.py and test_state_widget.py already cover
 several ACs; this file fills the gaps specifically noted in the task:
 
     AC 2.1.1  → test_ac_211_corpus_session_doc_split_in_report         [unit]
     AC 2.1.1  → test_ac_211_cli_corpus_eligible_phrase_with_mix        [integration]
-    AC 2.1.2  → documented as covered by test_synthesize_estimate.py
+    AC 2.1.2  → documented as covered by tests/synth/test_estimate.py
                 ::test_cli_estimate_corpus_uses_eligible_sources_and_mix
     AC 2.2.1  → test_ac_221_already_synthesized_n_of_m_in_report       [unit]
-    AC 2.2.2  → documented as covered by test_synthesize_estimate.py
+    AC 2.2.2  → documented as covered by tests/synth/test_estimate.py
                 ::test_cli_estimate_does_not_print_pages_in_wiki_sources
     AC 2.3.1  → test_ac_231_print_source_pages_output_format           [unit]
     AC 2.3.1  → test_ac_231_print_source_pages_says_current_state      [unit]
@@ -27,7 +27,7 @@ several ACs; this file fills the gaps specifically noted in the task:
 
 Notes on RED:
     Tests referencing already-landed slice tests were RED at implementation
-    time; see test_synthesize_estimate.py header.
+    time; see tests/synth/test_estimate.py header.
 
     New tests in this file exercise scenarios not present in earlier slice
     tests: the stale-bookkeeping divergence case (AC 2.3.2), direct-function
@@ -426,15 +426,15 @@ def test_ac_242_single_chunk_doc_also_counts_as_one(tmp_path: Path) -> None:
 #
 # AC 2.1.1  → test_ac_211_corpus_session_doc_split_in_report            (this file)
 # AC 2.1.1  → test_ac_211_corpus_sessions_only_when_no_docs             (this file)
-# AC 2.1.1  → tests/test_synthesize_estimate.py::test_cli_estimate_corpus_uses_eligible_sources_and_mix
-# AC 2.1.2  → tests/test_synthesize_estimate.py::test_cli_estimate_does_not_print_pages_in_wiki_sources
+# AC 2.1.1  → tests/synth/test_estimate.py::test_cli_estimate_corpus_uses_eligible_sources_and_mix
+# AC 2.1.2  → tests/synth/test_estimate.py::test_cli_estimate_does_not_print_pages_in_wiki_sources
 # AC 2.2.1  → test_ac_221_already_synthesized_n_of_m_in_report          (this file)
 # AC 2.2.1  → test_ac_221_fully_synthesized_still_reports_corpus_m      (this file)
-# AC 2.2.1  → tests/test_synthesize_estimate.py::test_cli_estimate_already_synthesized_uses_of_eligible
-# AC 2.2.2  → tests/test_synthesize_estimate.py::test_cli_estimate_does_not_print_pages_in_wiki_sources
+# AC 2.2.1  → tests/synth/test_estimate.py::test_cli_estimate_already_synthesized_uses_of_eligible
+# AC 2.2.2  → tests/synth/test_estimate.py::test_cli_estimate_does_not_print_pages_in_wiki_sources
 # AC 2.3.1  → test_ac_231_print_source_pages_output_format              (this file)
 # AC 2.3.1  → test_ac_231_print_source_pages_zero_stubs                 (this file)
-# AC 2.3.1  → tests/test_synthesize_estimate.py::test_cli_estimate_prints_source_pages_current_state
+# AC 2.3.1  → tests/synth/test_estimate.py::test_cli_estimate_prints_source_pages_current_state
 # AC 2.3.2  → test_ac_232_stale_bookkeeping_gap_visible_in_output       (this file)
 # AC 2.3.2  → test_ac_232_stale_bookkeeping_no_pages_in_wiki_sources_phrase (this file)
 # AC 2.3.3  → test_ac_233_source_pages_line_is_not_a_forecast           (this file)

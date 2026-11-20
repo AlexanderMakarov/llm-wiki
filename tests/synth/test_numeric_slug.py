@@ -6,6 +6,8 @@ therefore carries the slug exactly as the converter wrote it —
 ``<date>-<slug>`` — and never falls back to the whole raw stem, which doubled
 the date into the name. Raw names and titles are built with the converter's
 own helpers, so a change to either format fails here.
+
+# @spec: 417-synth-tests-consolidate
 """
 
 from __future__ import annotations

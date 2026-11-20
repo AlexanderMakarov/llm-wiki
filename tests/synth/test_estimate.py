@@ -16,6 +16,8 @@ Covers:
   whenever the chunk size has changed since a doc was last synthesized.
 * #311: body billing and doc chunk sizing use ``usable_body_chars`` (not a bare
   ``[:8000]`` coverage path).
+
+# @spec: 417-synth-tests-consolidate
 """
 
 from __future__ import annotations
@@ -42,8 +44,7 @@ from llmwiki.synth.pipeline import (
     raw_source_key,
     source_page_paths,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from tests._paths import REPO_ROOT
 
 
 def _run_cli(*args):

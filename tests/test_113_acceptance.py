@@ -12,12 +12,12 @@ AC coverage matrix (see bottom of module docstring):
 
     AC 2.1.1  → test_ac_211_pending_sources_estimate_uses_prerun_label   [integration]
     AC 2.1.2  → test_ac_212_pending_sources_estimate_prints_note          [integration]
-    AC 2.1.3  → documented as covered by test_synthesize_estimate.py
-    AC 2.2.1  → documented as covered by test_synth_run_summary.py
+    AC 2.1.3  → documented as covered by tests/synth/test_estimate.py
+    AC 2.2.1  → documented as covered by tests/synth/test_run_summary.py
     AC 2.2.2  → test_ac_222_end_summary_does_not_duplicate_candidates    [unit]
-    AC 2.2.3  → documented as covered by test_synth_run_summary.py
-    AC 2.2.4  → documented as covered by test_synth_run_summary.py
-    AC 2.3.1  → documented as covered by test_synth_run_summary.py
+    AC 2.2.3  → documented as covered by tests/synth/test_run_summary.py
+    AC 2.2.4  → documented as covered by tests/synth/test_run_summary.py
+    AC 2.3.1  → documented as covered by tests/synth/test_run_summary.py
 
 Notes on RED:
     ACs 2.1.3, 2.2.1, 2.2.3, 2.2.4, 2.3.1 satisfied by prior slice tests — those
@@ -184,10 +184,10 @@ def test_ac_222_end_summary_does_not_duplicate_candidates(
 #
 # AC 2.1.1  → test_ac_211_pending_sources_estimate_uses_prerun_label   (this file)
 # AC 2.1.2  → test_ac_212_pending_sources_estimate_prints_note          (this file)
-# AC 2.1.3  → tests/test_synthesize_estimate.py::test_cli_estimate_labels_candidates_as_pre_run_state
-# AC 2.2.1  → tests/test_synth_run_summary.py::test_synth_prints_post_harvest_run_summary
+# AC 2.1.3  → tests/synth/test_estimate.py::test_cli_estimate_labels_candidates_as_pre_run_state
+# AC 2.2.1  → tests/synth/test_run_summary.py::test_synth_prints_post_harvest_run_summary
 # AC 2.2.2  → test_ac_222_end_summary_does_not_duplicate_candidates    (this file)
-# AC 2.2.3  → tests/test_synth_run_summary.py::test_synth_run_summary_omits_fabricated_token_and_cost
-# AC 2.2.4  → tests/test_synth_run_summary.py::test_estimate_skips_end_of_run_summary
-#             tests/test_synthesize_estimate.py::test_cli_estimate_does_not_print_post_run_summary
+# AC 2.2.3  → tests/synth/test_run_summary.py::test_synth_run_summary_omits_fabricated_token_and_cost
+# AC 2.2.4  → tests/synth/test_run_summary.py::test_estimate_skips_end_of_run_summary
+#             tests/synth/test_estimate.py::test_cli_estimate_does_not_print_post_run_summary
 # AC 2.3.1  → harvest Candidates line (test_synth_prints_post_harvest_run_summary)

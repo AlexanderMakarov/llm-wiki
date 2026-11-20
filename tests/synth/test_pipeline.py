@@ -1,4 +1,7 @@
-"""Tests for the auto-ingest synthesis pipeline (v0.5 · #36)."""
+"""Tests for the auto-ingest synthesis pipeline (v0.5 · #36).
+
+# @spec: 417-synth-tests-consolidate
+"""
 
 from __future__ import annotations
 

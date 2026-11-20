@@ -1,4 +1,7 @@
-"""Tests for llmwiki.synth.claude_cli — synchronous `claude -p` backend (#16)."""
+"""Tests for llmwiki.synth.claude_cli — synchronous `claude -p` backend (#16).
+
+# @spec: 417-synth-tests-consolidate
+"""
 
 from __future__ import annotations
 
