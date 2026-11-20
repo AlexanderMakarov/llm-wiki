@@ -101,6 +101,31 @@ def test_page_findability_clean_vault(tmp_path: Path):
     assert any("checked 2 of 2" in i["message"] for i in infos)
 
 
+def test_page_findability_exact_title_survives_substring_title_flood(tmp_path: Path):
+    """#417: an entity titled exactly ``Cursor`` stays within the page cap even
+    when more than PAGE_CAP_FOR_FINDABILITY short sources are titled
+    ``Cursor session N``."""
+    sessions = "".join(f"- [[cursor-session-{i}]] — worked in Cursor\n" for i in range(250))
+    _wiki_page(
+        tmp_path,
+        "entities/Cursor.md",
+        "Cursor",
+        body=f"# Cursor\n\nAI code editor.\n\n## Sessions\n{sessions}",
+    )
+    for i in range(250):
+        _write(
+            tmp_path / "wiki" / "sources" / f"cursor-session-{i}.md",
+            f"---\ntitle: Cursor session {i}\ntype: source\n---\n\nUsed Cursor.\n",
+        )
+    outcome = run_lint(
+        load_pages(tmp_path / "wiki"),
+        selected=["page_findability"],
+        options=_lint_options(tmp_path, sample_max=1000),
+    )
+    errors = [i for i in outcome.issues if i["severity"] == "error"]
+    assert not [e for e in errors if "Cursor.md" in e["page"]], errors
+
+
 def test_page_findability_reports_unscored_title(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -131,8 +156,8 @@ def test_page_findability_reports_unscored_title(
 
 
 def test_title_ambiguity_names_outranker(tmp_path: Path):
-    # Long page with a short title loses to a shorter near-duplicate whose
-    # title still contains the query (length normalisation + shared phrase).
+    # Long page loses to a shorter case-variant duplicate title: both earn the
+    # exact-title bonus, so length normalisation decides.
     long_body = ("lorem ipsum dolor sit amet " * 80) + "\n"
     _wiki_page(
         tmp_path,
@@ -143,7 +168,7 @@ def test_title_ambiguity_names_outranker(tmp_path: Path):
     _wiki_page(
         tmp_path,
         "entities/Aaa.md",
-        "Configuration Guide",
+        "configuration",
         body="Configuration\n",
     )
     pages = load_pages(tmp_path / "wiki")
@@ -158,6 +183,29 @@ def test_title_ambiguity_names_outranker(tmp_path: Path):
     assert config
     assert "outranked by" in config[0]["message"]
     assert "Aaa.md" in config[0]["message"]
+
+
+def test_title_ambiguity_quiet_when_exact_title_beats_substring_title(tmp_path: Path):
+    """#417: a substring-title page no longer outranks the exact-title page."""
+    _wiki_page(
+        tmp_path,
+        "entities/Config.md",
+        "Configuration",
+        body=("lorem ipsum dolor sit amet " * 80) + "\n",
+    )
+    _wiki_page(
+        tmp_path,
+        "entities/Aaa.md",
+        "Configuration Guide",
+        body="Configuration\n",
+    )
+    outcome = run_lint(
+        load_pages(tmp_path / "wiki"),
+        selected=["title_ambiguity"],
+        options=_lint_options(tmp_path),
+    )
+    warnings = [i for i in outcome.issues if i["severity"] == "warning"]
+    assert not [w for w in warnings if "Config.md" in w["page"]], warnings
 
 
 def test_title_ambiguity_reports_tie(tmp_path: Path):

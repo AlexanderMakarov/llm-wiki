@@ -1098,6 +1098,8 @@ python3 -m llmwiki search --terms-file - --mode phrase < phrases.txt
 | `--max-pages N` | Result cap in phrase mode. Default: `5`. |
 | `--format {text,json}` | Text list or JSON payload matching the MCP tool shapes. Default: `text`. |
 
+Phrase-mode ranking (shared with MCP `wiki_search` extract mode and the findability lint rules): body matches score +50 for the whole phrase and +10 per query word, divided by `log2` of the page length (floor 256 characters) so long pages do not dominate. Title matches add +100 for the phrase and +20 per word, unnormalised, plus +200 when the whole title equals the query (case-insensitive, surrounding whitespace ignored). A page titled exactly `Cursor` therefore ranks above pages titled `Cursor session 3`, however short they are. Ties sort by relative path.
+
 Bulk runs group hits per entry and state which entries returned nothing. Always exits `0` on a successful search (including zero hits). Does not interpret expectations — use lint findability rules (`page_findability`, `title_ambiguity`, `search_consistency`) for pass/fail. Read-only: never modifies the vault.
 
 ---
