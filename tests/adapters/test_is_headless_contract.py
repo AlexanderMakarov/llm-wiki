@@ -1,4 +1,7 @@
-"""Contract: every registered adapter defines ``is_headless_session`` (#180)."""
+"""Contract: every registered adapter defines ``is_headless_session`` (#180).
+
+# @spec: 416-adapter-tests-consolidate (#317)
+"""
 
 from __future__ import annotations
 
@@ -6,6 +9,7 @@ from llmwiki.adapters import REGISTRY, discover_all
 
 
 def test_every_registered_adapter_defines_is_headless_session() -> None:
+    """Every REGISTRY adapter defines is_headless_session on the class itself."""
     discover_all()
     missing: list[str] = []
     for name, cls in REGISTRY.items():

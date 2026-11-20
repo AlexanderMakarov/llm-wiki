@@ -2,6 +2,7 @@
 
 # @layer: unit
 # @spec: 280-shrink-test-suite
+# @spec: 416-adapter-tests-consolidate
 """
 
 from __future__ import annotations
@@ -30,9 +31,18 @@ CURSOR_TESTING_EXPERT = REPO_ROOT / ".cursor" / "agents" / "testing-expert.md"
 CANONICAL_TESTING_EXPERT = REPO_ROOT / ".claude" / "agents" / "testing-expert.md"
 TESTS_DIR = REPO_ROOT / "tests"
 CLI_TESTS = TESTS_DIR / "cli"
+ADAPTER_TESTS = TESTS_DIR / "adapters"
+ADAPTER_CONTRIB_TESTS = ADAPTER_TESTS / "contrib"
+
 
 def _mirrored_test_package_has_modules(pkg: Path) -> None:
     assert (pkg / "__init__.py").is_file()
+    assert any(pkg.glob("test_*.py"))
+
+
+def _mirrored_test_dir_has_modules(pkg: Path) -> None:
+    """Layout gate for mirrors that follow the #316 MCP convention (no ticket-only ``__init__.py``)."""
+    assert pkg.is_dir()
     assert any(pkg.glob("test_*.py"))
 
 
@@ -110,12 +120,29 @@ def test_coding_standards_doc_names_floor_and_cli_layout() -> None:
     assert "tests/cli/" in text
     assert "tests/render/" in text
     assert "tests/mcp/" in text  # @spec: 415-mcp-tests-consolidate
+    assert "tests/adapters/" in text  # @spec: 416-adapter-tests-consolidate
 
 
 # @regression
 def test_cli_unit_tests_live_under_mirrored_cli_package() -> None:
     """CLI unit coverage lives under ``tests/cli/`` as a package with test modules."""
     _mirrored_test_package_has_modules(CLI_TESTS)
+
+
+# @regression
+# @spec: 416-adapter-tests-consolidate
+def test_adapter_unit_tests_live_under_mirrored_adapters_dir() -> None:
+    """Adapter unit coverage lives under ``tests/adapters/`` with ``test_*.py`` modules (no ticket-only init)."""
+    _mirrored_test_dir_has_modules(ADAPTER_TESTS)
+    assert not (ADAPTER_TESTS / "__init__.py").exists()
+
+
+# @regression
+# @spec: 416-adapter-tests-consolidate
+def test_adapter_contrib_unit_tests_live_under_contrib_dir() -> None:
+    """Contrib adapter unit coverage lives under ``tests/adapters/contrib/`` with ``test_*.py`` modules."""
+    _mirrored_test_dir_has_modules(ADAPTER_CONTRIB_TESTS)
+    assert not (ADAPTER_CONTRIB_TESTS / "__init__.py").exists()
 
 
 # @regression

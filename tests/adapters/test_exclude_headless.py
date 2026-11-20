@@ -3,6 +3,8 @@
 Research (in-repo fixtures + local stores on this host) found no verified
 automation / nested-agent / second-model markers for these adapters, so each
 method returns False. Claude Code and Cursor Agent CLI are covered elsewhere.
+
+# @spec: 416-adapter-tests-consolidate (#317)
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ _SLICE3 = (
 
 @pytest.mark.parametrize("name,cls", _SLICE3, ids=[n for n, _ in _SLICE3])
 def test_slice3_empty_records_not_headless(name: str, cls: type) -> None:
+    """Slice-3 adapters treat empty record lists as not headless."""
     assert cls().is_headless_session([]) is False
 
 
@@ -68,6 +71,7 @@ def test_codex_normalized_session_meta_shape_not_headless() -> None:
 
 
 def test_opencode_message_records_not_headless() -> None:
+    """OpenCode user/assistant message shapes are not classified headless."""
     records = [
         {"type": "user", "message": {"role": "user", "content": "refactor"}},
         {"type": "assistant", "message": {"role": "assistant", "content": "ok"}},
@@ -93,10 +97,12 @@ def test_openclaw_always_false_including_session_header() -> None:
 
 
 def test_copilot_cli_init_event_not_headless() -> None:
+    """Copilot CLI init events are not classified headless."""
     assert CopilotCliAdapter().is_headless_session([{"type": "init"}]) is False
 
 
 def test_copilot_chat_records_not_headless() -> None:
+    """Copilot Chat records are not classified headless."""
     records = [{"type": "user", "message": {"role": "user", "content": "explain"}}]
     assert CopilotChatAdapter().is_headless_session(records) is False
 
@@ -113,6 +119,7 @@ def test_chatgpt_export_records_not_headless() -> None:
 
 
 def test_gemini_cli_scaffold_not_headless() -> None:
+    """Gemini CLI scaffold sessions are not classified headless."""
     assert GeminiCliAdapter().is_headless_session(
         [{"type": "user", "message": {"role": "user", "content": "q"}}]
     ) is False

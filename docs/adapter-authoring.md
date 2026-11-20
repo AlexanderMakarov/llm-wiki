@@ -255,7 +255,7 @@ def test_derive_project_slug(tmp_path):
 - [ ] `session_store_path` covers macOS, Linux, and Windows
 - [ ] `is_available()` returns `False` gracefully when the agent is not installed
 - [ ] `normalize_records()` implemented if the schema differs from Claude Code
-- [ ] Test file at `tests/test_adapter_<name>.py` with fixture, snapshot, and degradation tests
+- [ ] Test module under `tests/adapters/` (core) or `tests/adapters/contrib/` (contrib) with fixture, snapshot, and degradation tests
 - [ ] Fixture file at `tests/fixtures/<name>/sample.jsonl`
 - [ ] `llmwiki adapters` shows the new adapter with correct description
 - [ ] Documentation updated in `docs/multi-agent-setup.md`

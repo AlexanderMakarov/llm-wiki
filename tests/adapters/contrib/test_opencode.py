@@ -1,4 +1,7 @@
-"""Tests for the OpenCode / OpenClaw adapter (v1.1, #43)."""
+"""Tests for the OpenCode / OpenClaw adapter (v1.1, #43).
+
+# @spec: 416-adapter-tests-consolidate (#317)
+"""
 
 from __future__ import annotations
 
@@ -11,6 +14,7 @@ from llmwiki.adapters.contrib.opencode import OpenCodeAdapter
 
 
 def test_adapter_registered():
+    """OpenCode adapter is present in REGISTRY."""
     discover_all()
     assert "opencode" in REGISTRY
 

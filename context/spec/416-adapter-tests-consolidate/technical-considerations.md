@@ -1,7 +1,7 @@
 # Technical Specification: Mirror adapter unit tests under tests/adapters/
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---

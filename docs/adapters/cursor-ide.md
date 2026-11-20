@@ -74,7 +74,7 @@ When `workspaceId` is present (typically the `workspaceStorage` directory hash),
 
 ```bash
 python3 -m llmwiki adapters
-python3 -m pytest tests/test_cursor_ide_adapter.py -q
+python3 -m pytest tests/adapters/contrib/test_cursor_ide.py -q
 ```
 
 ## See also

@@ -52,7 +52,7 @@ Override roots in `config.json`:
 
 ```bash
 python3 -m llmwiki adapters      # should list gemini_cli as available (if installed)
-python3 -m pytest tests/test_adapter_graduation.py -k gemini -v
+python3 -m pytest tests/adapters/test_graduation.py -k gemini -v
 ```
 
 ## Fixture

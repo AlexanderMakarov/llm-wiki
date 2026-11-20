@@ -10,6 +10,8 @@ The fix: BaseAdapter.is_available() now instantiates a temp
 instance and reads self.session_store_path through the same code
 path discover_sessions() uses. 7 contrib overrides removed; one
 (copilot_cli) kept for COPILOT_HOME env-var handling.
+
+# @spec: 416-adapter-tests-consolidate (#317)
 """
 
 from __future__ import annotations

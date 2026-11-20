@@ -3,6 +3,8 @@
 Verifies each adapter's contract: SUPPORTED_SCHEMA_VERSIONS,
 discover_sessions, derive_project_slug, cross-platform DEFAULT_ROOTS,
 and graceful degradation (no crash on bad input / nonexistent paths).
+
+# @spec: 416-adapter-tests-consolidate (#317)
 """
 
 from __future__ import annotations
@@ -21,13 +23,16 @@ from llmwiki.adapters.contrib.copilot_cli import CopilotCliAdapter, _build_defau
 
 class TestCopilotChatContract:
     def test_has_supported_schema_versions(self):
+        """Adapter declares at least one supported schema version."""
         assert hasattr(CopilotChatAdapter, "SUPPORTED_SCHEMA_VERSIONS")
         assert len(CopilotChatAdapter.SUPPORTED_SCHEMA_VERSIONS) >= 1
 
     def test_subclasses_base_adapter(self):
+        """Adapter class subclasses BaseAdapter."""
         assert issubclass(CopilotChatAdapter, BaseAdapter)
 
     def test_session_store_path_returns_list(self):
+        """session_store_path must resolve to a usable path value without raising."""
         adapter = CopilotChatAdapter()
         paths = adapter.session_store_path
         assert isinstance(paths, list)
@@ -47,14 +52,17 @@ class TestCopilotChatContract:
         assert len(slug) > 0
 
     def test_instantiate_with_no_config(self):
+        """Adapter constructs with no config argument."""
         adapter = CopilotChatAdapter()
         assert adapter is not None
 
     def test_instantiate_with_empty_config(self):
+        """Adapter constructs with an empty config dict."""
         adapter = CopilotChatAdapter(config={})
         assert adapter is not None
 
     def test_description_is_nonempty(self):
+        """Adapter description is a non-empty string for CLI/docs listing."""
         desc = CopilotChatAdapter.description()
         assert isinstance(desc, str)
         assert len(desc) > 0
@@ -229,13 +237,16 @@ class TestCopilotChatGracefulDegradation:
 
 class TestCopilotCliContract:
     def test_has_supported_schema_versions(self):
+        """Adapter declares at least one supported schema version."""
         assert hasattr(CopilotCliAdapter, "SUPPORTED_SCHEMA_VERSIONS")
         assert len(CopilotCliAdapter.SUPPORTED_SCHEMA_VERSIONS) >= 1
 
     def test_subclasses_base_adapter(self):
+        """Adapter class subclasses BaseAdapter."""
         assert issubclass(CopilotCliAdapter, BaseAdapter)
 
     def test_session_store_path_returns_list(self):
+        """session_store_path must resolve to a usable path value without raising."""
         adapter = CopilotCliAdapter()
         paths = adapter.session_store_path
         assert isinstance(paths, list)
@@ -255,14 +266,17 @@ class TestCopilotCliContract:
         assert len(slug) > 0
 
     def test_instantiate_with_no_config(self):
+        """Adapter constructs with no config argument."""
         adapter = CopilotCliAdapter()
         assert adapter is not None
 
     def test_instantiate_with_empty_config(self):
+        """Adapter constructs with an empty config dict."""
         adapter = CopilotCliAdapter(config={})
         assert adapter is not None
 
     def test_description_is_nonempty(self):
+        """Adapter description is a non-empty string for CLI/docs listing."""
         desc = CopilotCliAdapter.description()
         assert isinstance(desc, str)
         assert len(desc) > 0
@@ -406,6 +420,7 @@ class TestCopilotCliGracefulDegradation:
 
 class TestCopilotCrossAdapter:
     def test_both_handle_empty_config(self):
+        """Both Copilot adapters construct with empty config."""
         for cls in [CopilotChatAdapter, CopilotCliAdapter]:
             adapter = cls(config={})
             assert adapter is not None
@@ -418,6 +433,7 @@ class TestCopilotCrossAdapter:
         # #v1378-review: aliases moved out of REGISTRY into
         # REGISTRY_ALIASES so a canonical iteration of REGISTRY hits
         # each adapter once. Lookup-by-alias goes through resolve_adapter_name.
+        """Both Copilot adapters are present in REGISTRY after discover."""
         discover_all()
         assert "copilot_chat" in REGISTRY
         assert "copilot_cli" in REGISTRY

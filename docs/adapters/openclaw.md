@@ -56,7 +56,7 @@ Standard `raw/sessions/<YYYY-MM-DDTHH-MM>-openclaw-<agent>-<slug>.md` (project s
 ## Code
 
 - `llmwiki/adapters/contrib/openclaw.py`
-- Tests: `tests/test_openclaw_cursor_cli_adapters.py`
+- Tests: `tests/adapters/contrib/test_openclaw_cursor_cli.py`
 
 ## See also
 
