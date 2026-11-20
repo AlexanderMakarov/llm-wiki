@@ -25,8 +25,8 @@ AC coverage matrix (R<requirement>-AC<n>, in functional-spec.md bullet order):
     R3-AC4  → test_r3_project_page_is_lint_clean_claim_checked_ranked_and_cataloged
     R3-AC5  → test_r3_project_page_is_lint_clean_claim_checked_ranked_and_cataloged
     R3-AC6  → test_r3_project_page_is_lint_clean_claim_checked_ranked_and_cataloged
-    R4-AC1  → covered by tests/test_mcp_enhanced.py::test_search_is_the_only_search_tool
-    R4-AC2..AC6 → covered by tests/test_mcp_enhanced.py (kind filter / ranking /
+    R4-AC1  → covered by tests/mcp/test_tools.py::test_search_is_the_only_search_tool
+    R4-AC2..AC6 → covered by tests/mcp/test_tools.py (kind filter / ranking /
                   kind+include_raw composition)
     R4-AC7  → test_r4_old_entity_search_tool_name_is_now_unknown
     R5-AC1..AC5 → covered by tests/cli/test_candidates.py + tests/test_synth_pipeline.py

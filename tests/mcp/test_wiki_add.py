@@ -4,6 +4,15 @@
 ``llmwiki add`` (raw + site build; synthesize opt-in). It must resolve the
 vault the same way every other MCP tool does (the patched `REPO_ROOT`
 module global), never the operator live vault.
+
+Default raw+build / no-synth and synthesize opt-in *invocation* parity with
+CLI live in ``test_add_cli_proxy.py`` (acceptance / proxy framing). This module
+keeps registration, validation, routes, #307 provenance, timeout/poll, and
+lock-holder contracts — do not re-add the overlapping default/synth call-count
+cases here.
+
+# @spec: 415-mcp-tests-consolidate
+#316
 """
 
 from __future__ import annotations
@@ -17,7 +26,6 @@ from unittest.mock import patch
 
 import llmwiki.add_pipeline as pipe
 from llmwiki._frontmatter import parse_frontmatter
-from llmwiki.add_pipeline import run_add
 from llmwiki.cli import cmd_queue
 from llmwiki.config_schedule import clear_vault_binding
 from llmwiki.mcp import server as mcp_server
@@ -50,20 +58,23 @@ def _schema_props() -> dict:
 
 
 def test_wiki_add_registered_in_tools_and_impls():
+    """``wiki_add`` appears in TOOLS and maps to ``tool_wiki_add``."""
     names = {t["name"] for t in TOOLS}
     assert "wiki_add" in names
     assert TOOL_IMPLS["wiki_add"] is tool_wiki_add
 
 
 def test_wiki_add_schema_exposes_synthesize_and_no_build():
+    """Schema defaults: synthesize off, build on; ``operation_id`` is advertised.
+
+    Full proxy-model / guardrail wording lives in
+    ``test_add_cli_proxy.test_tool_description_documents_proxy_model_and_guardrail``.
+    """
     props = _schema_props()
     assert props["synthesize"]["default"] is False
     assert props["no_build"]["default"] is False
     assert "operation_id" in props
     desc = next(t for t in TOOLS if t["name"] == "wiki_add")["description"]
-    assert "Proxy for CLI" in desc or "proxy" in desc.lower()
-    assert "synthesize" in desc.lower()
-    assert "do not reconstruct" in desc.lower() or "unless the user asked" in desc
     assert "operation_id" in desc
     assert "filesystem" in desc
 
@@ -72,18 +83,21 @@ def test_wiki_add_schema_exposes_synthesize_and_no_build():
 
 
 def test_wiki_add_requires_a_source():
+    """Calling with no url/path/content is an error."""
     result = tool_wiki_add({})
     assert result["isError"] is True
     assert "exactly one of" in _result_text(result)
 
 
 def test_wiki_add_rejects_two_sources_at_once():
+    """url and content together are rejected as ambiguous input."""
     result = tool_wiki_add({"url": "https://example.com/x", "content": "hello"})
     assert result["isError"] is True
     assert "exactly one of" in _result_text(result)
 
 
 def test_wiki_add_rejects_all_three_sources_at_once():
+    """url, path, and content together are rejected as ambiguous input."""
     result = tool_wiki_add({
         "url": "https://example.com/x",
         "path": "/tmp/whatever.md",
@@ -97,6 +111,7 @@ def test_wiki_add_rejects_all_three_sources_at_once():
 
 
 def test_wiki_add_content_lands_raw_doc_under_resolved_vault(tmp_path: Path, monkeypatch):
+    """Content route writes one ``raw/docs/`` file under the patched MCP vault."""
     vault = _vault(tmp_path)
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
     with patch("llmwiki.mcp.server.REPO_ROOT", vault):
@@ -132,63 +147,12 @@ def test_wiki_add_content_piped_provenance(tmp_path: Path, monkeypatch):
     assert "wiki-add-content-" not in text
 
 
-def test_wiki_add_content_parity_with_cli_text_add(tmp_path: Path, monkeypatch):
-    """Same body via MCP content and CLI ``add -`` → same piped provenance."""
-    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
-    body = "# Parity Doc\n\nshared body for mcp and cli\n"
-
-    mcp_vault = _vault(tmp_path / "mcp")
-    with patch("llmwiki.mcp.server.REPO_ROOT", mcp_vault):
-        mcp_result = tool_wiki_add({"content": body, "no_build": True})
-    assert mcp_result["isError"] is False, _result_text(mcp_result)
-    mcp_text = (mcp_vault / _result_json(mcp_result)["written"][0]).read_text(
-        encoding="utf-8"
-    )
-
-    cli_vault = _vault(tmp_path / "cli")
-    cli_result = run_add(
-        ["-"],
-        cli_vault / "raw" / "docs",
-        vault_root=cli_vault,
-        build=False,
-        stdin_text=body,
-    )
-    assert cli_result["exit_code"] == 0
-    cli_text = cli_result["written"][0].read_text(encoding="utf-8")
-
-    assert ('source: "piped"' in mcp_text) or ("source: piped" in mcp_text)
-    assert ('source: "piped"' in cli_text) or ("source: piped" in cli_text)
-    assert "shared body for mcp and cli" in mcp_text
-    assert "shared body for mcp and cli" in cli_text
-
-
-def test_wiki_add_default_builds_without_synth(tmp_path: Path, monkeypatch):
-    vault = _vault(tmp_path)
-    synth_called = {"n": 0}
-    build_called = {"n": 0}
-    monkeypatch.setattr(
-        pipe,
-        "synthesize_new_sessions",
-        lambda **kw: (synth_called.__setitem__("n", synth_called["n"] + 1) or {
-            "synthesized": 0, "skipped": 0, "errors": [],
-        }),
-    )
-    monkeypatch.setattr(
-        pipe,
-        "build_site",
-        lambda **kw: (build_called.__setitem__("n", build_called["n"] + 1) or 0),
-    )
-    with patch("llmwiki.mcp.server.REPO_ROOT", vault):
-        result = tool_wiki_add({"content": "# Default Doc\n\nbody\n"})
-    assert result["isError"] is False, _result_text(result)
-    assert synth_called["n"] == 0
-    assert build_called["n"] == 1
-    sources = vault / "wiki" / "sources"
-    sources.mkdir(parents=True, exist_ok=True)
-    assert list(sources.rglob("*.md")) == []
+# Default raw+build/no-synth, MCP↔CLI piped parity, and synthesize opt-in
+# call counts: owned by ``test_add_cli_proxy.py`` (acceptance / proxy framing).
 
 
 def test_wiki_add_no_build_skips_site_rebuild(tmp_path: Path, monkeypatch):
+    """``no_build=True`` must not call ``build_site`` while still writing the raw doc."""
     vault = _vault(tmp_path)
     build_called = {"n": 0}
     monkeypatch.setattr(
@@ -204,52 +168,6 @@ def test_wiki_add_no_build_skips_site_rebuild(tmp_path: Path, monkeypatch):
     assert result["isError"] is False, _result_text(result)
     assert build_called["n"] == 0
     assert (vault / _result_json(result)["written"][0]).exists()
-
-
-def test_wiki_add_synthesize_opt_in(tmp_path: Path, monkeypatch):
-    vault = _vault(tmp_path)
-    synth_called = {"n": 0}
-
-    class _Ok:
-        name = "dummy"
-
-        def is_available(self):
-            return True
-
-    def _fake_synth(**kwargs):
-        synth_called["n"] += 1
-        return {
-            "total_scanned": 1,
-            "new_files": 1,
-            "synthesized": 1,
-            "skipped": 0,
-            "errors": [],
-            "backend": "dummy",
-        }
-
-    def _expected(raw_path, sources_dir):
-        p = Path(sources_dir) / "docs" / "synth-opt-in.md"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text("# Synth Opt In\n", encoding="utf-8")
-        return p
-
-    monkeypatch.setattr(pipe, "_load_sessions_config", lambda: {
-        "synthesis": {"backend": "dummy"},
-    })
-    monkeypatch.setattr(pipe, "resolve_backend", lambda _cfg: _Ok())
-    monkeypatch.setattr(pipe, "synthesize_new_sessions", _fake_synth)
-    monkeypatch.setattr(pipe, "expected_source_page", _expected)
-    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
-
-    with patch("llmwiki.mcp.server.REPO_ROOT", vault):
-        result = tool_wiki_add({
-            "content": "# Synth Opt In\n\nbody\n",
-            "synthesize": True,
-            "no_build": True,
-        })
-    assert result["isError"] is False, _result_text(result)
-    assert synth_called["n"] == 1
-    assert (vault / "wiki" / "sources" / "docs" / "synth-opt-in.md").exists()
 
 
 # @layer: integration
@@ -285,19 +203,8 @@ def test_wiki_add_synthesize_page_claims_raw_doc_and_is_not_a_transcript(
     assert "session-transcript" not in meta["tags"]
 
 
-def test_wiki_add_content_does_not_synthesize_wiki_sources(tmp_path: Path, monkeypatch):
-    """Default add must not create wiki/sources pages (#273)."""
-    vault = _vault(tmp_path)
-    monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
-    with patch("llmwiki.mcp.server.REPO_ROOT", vault):
-        result = tool_wiki_add({"content": "# Another Note\n\nBody text.\n"})
-    assert result["isError"] is False, _result_text(result)
-    sources = vault / "wiki" / "sources"
-    sources.mkdir(parents=True, exist_ok=True)
-    assert list(sources.rglob("*.md")) == []
-
-
 def test_wiki_add_content_honors_title_and_project(tmp_path: Path, monkeypatch):
+    """Optional title/project args land under ``raw/docs/<project>/`` with that title."""
     vault = _vault(tmp_path)
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
     with patch("llmwiki.mcp.server.REPO_ROOT", vault):
@@ -319,6 +226,7 @@ def test_wiki_add_content_honors_title_and_project(tmp_path: Path, monkeypatch):
 
 
 def test_wiki_add_path_lands_raw_doc(tmp_path: Path, monkeypatch):
+    """Path route copies an external file into ``raw/docs/`` with path provenance."""
     vault = _vault(tmp_path)
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
     src_dir = tmp_path / "outside"
@@ -339,6 +247,7 @@ def test_wiki_add_path_lands_raw_doc(tmp_path: Path, monkeypatch):
 
 
 def test_wiki_add_missing_path_reports_error(tmp_path: Path, monkeypatch):
+    """A path that does not exist returns ``isError``."""
     vault = _vault(tmp_path)
     monkeypatch.setattr(pipe, "build_site", lambda **kw: 0)
     with patch("llmwiki.mcp.server.REPO_ROOT", vault):

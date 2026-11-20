@@ -30,6 +30,7 @@ CURSOR_TESTING_EXPERT = REPO_ROOT / ".cursor" / "agents" / "testing-expert.md"
 CANONICAL_TESTING_EXPERT = REPO_ROOT / ".claude" / "agents" / "testing-expert.md"
 TESTS_DIR = REPO_ROOT / "tests"
 CLI_TESTS = TESTS_DIR / "cli"
+MCP_TESTS = TESTS_DIR / "mcp"
 
 def _mirrored_test_package_has_modules(pkg: Path) -> None:
     assert (pkg / "__init__.py").is_file()
@@ -109,12 +110,21 @@ def test_coding_standards_doc_names_floor_and_cli_layout() -> None:
     assert "fail_under = 87" in text
     assert "tests/cli/" in text
     assert "tests/render/" in text
+    assert "tests/mcp/" in text  # @spec: 415-mcp-tests-consolidate
 
 
 # @regression
 def test_cli_unit_tests_live_under_mirrored_cli_package() -> None:
     """CLI unit coverage lives under ``tests/cli/`` as a package with test modules."""
     _mirrored_test_package_has_modules(CLI_TESTS)
+
+
+# @regression
+# @spec: 415-mcp-tests-consolidate
+def test_mcp_unit_tests_live_under_mirrored_mcp_package() -> None:
+    """MCP unit coverage lives under ``tests/mcp/`` as a directory with test modules."""
+    assert MCP_TESTS.is_dir()
+    assert any(MCP_TESTS.glob("test_*.py"))
 
 
 # @regression

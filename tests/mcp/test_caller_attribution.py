@@ -7,6 +7,9 @@ actually made the call. These tests pin the replacement: attribution is
 resolved per call, from a signal the caller supplied (MCP roots, or a
 caller-scoped path argument), and is honestly ``unknown`` when there is
 no such signal.
+
+# @spec: 415-mcp-tests-consolidate
+#316
 """
 from __future__ import annotations
 

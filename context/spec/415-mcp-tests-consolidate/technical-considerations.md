@@ -1,7 +1,7 @@
 # Technical Specification: Mirror MCP unit tests under tests/mcp/
 
 - **Functional Specification:** [functional-spec.md](./functional-spec.md)
-- **Status:** Approved
+- **Status:** Completed
 - **Author(s):** 4ellendger
 
 ---
@@ -37,11 +37,10 @@ One PR creates `tests/mcp/` mirroring `llmwiki/mcp/` concerns, moves the bounded
 
 ```
 tests/mcp/
-  __init__.py          # docstring + @spec: 415-mcp-tests-consolidate / #316
   test_*.py            # consolidated modules as above
 ```
 
-Use shared `from tests._paths import REPO_ROOT` (`tests/_paths.py` already resolves repo root via `parents[1]`). Do **not** add a nested `tests/mcp/_paths.py` unless a second shared helper is required. Align module names with concerns, not issue numbers. Issue/spec links in module docstrings / `# @spec:`.
+No ticket-only `tests/mcp/__init__.py` — pytest collects `test_*.py` under the directory without a package init; quality gates assert the directory has modules. Use shared `from tests._paths import REPO_ROOT` (`tests/_paths.py` already resolves repo root via `parents[1]`). Do **not** add a nested `tests/mcp/_paths.py` unless a second shared helper is required. Align module names with concerns, not issue numbers. Issue/spec links in module docstrings / `# @spec:`.
 
 **Path fix required:** `test_mcp_protocol.py` currently uses `Path(__file__).resolve().parent.parent` for repo root — under `tests/mcp/` that becomes wrong; switch to `tests._paths.REPO_ROOT` (or `parents[2]`).
 

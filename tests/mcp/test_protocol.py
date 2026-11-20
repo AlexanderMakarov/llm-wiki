@@ -18,6 +18,9 @@ Catches:
 Each test is a self-contained subprocess invocation so a hung server
 doesn't deadlock the runner. We `terminate()` after each interaction
 and assert via `communicate(timeout=...)`.
+
+# @spec: 415-mcp-tests-consolidate
+#316
 """
 from __future__ import annotations
 
@@ -26,11 +29,10 @@ import os
 import select
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests._paths import REPO_ROOT
 
 
 def _spawn(extra_env: dict | None = None) -> subprocess.Popen:
