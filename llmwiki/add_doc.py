@@ -29,7 +29,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 from llmwiki import __version__
-from llmwiki._frontmatter import parse_frontmatter
+from llmwiki._frontmatter import format_inline_list, parse_frontmatter
 from llmwiki.claude_path import resolve_claude_path as _resolve_claude_path
 from llmwiki.convert import _resolve_convert_config, _substitute_path_username
 from llmwiki.doc_chunking import doc_size_error
@@ -727,7 +727,7 @@ def find_existing_by_hash(docs_dir: Path, content_hash: str) -> str | None:
 def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
                  today: str, source: str, *, content_sha256: str,
                  extractor: str | None = None) -> str:
-    tag_list = ", ".join(("wiki-add", "raw-doc") + tags)
+    tag_list = format_inline_list(("wiki-add", "raw-doc") + tags)
     extractor_line = f"extractor: {extractor}\n" if extractor else ""
     return (
         "---\n"
@@ -735,7 +735,7 @@ def _frontmatter(title: str, slug: str, project: str, tags: tuple[str, ...],
         f"slug: {slug}\n"
         f"project: {project}\n"
         "type: source\n"
-        f"tags: [{tag_list}]\n"
+        f"tags: {tag_list}\n"
         f"date: {today}\n"
         f"source: {json.dumps(source, ensure_ascii=False)}\n"
         f"content_sha256: {content_sha256}\n"

@@ -38,7 +38,13 @@ from llmwiki import REPO_ROOT
 # #py-m1 (#587) / #arch-h5 (#610): import directly from _frontmatter
 # instead of via build.py. The build module pulls in 145+ transitive
 # imports; the parser sits cleanly in _frontmatter.py with no deps.
-from llmwiki._frontmatter import is_empty_session, is_headless, is_subagent, parse_frontmatter
+from llmwiki._frontmatter import (
+    format_inline_list,
+    is_empty_session,
+    is_headless,
+    is_subagent,
+    parse_frontmatter,
+)
 from llmwiki.agent_label import detect_agent_label
 from llmwiki.candidates import apply_review_summary_to_pipeline
 from llmwiki.config_schedule import _load_sessions_config, resolve_vault_dir
@@ -1388,7 +1394,7 @@ def _build_source_page(
         "---",
         f'title: "{title}"',
         "type: source",
-        f"tags: [{', '.join(tags)}]",
+        f"tags: {format_inline_list(tags)}",
         f"date: {date}",
         f"source_file: {source_file}",
         f"project: {project}",

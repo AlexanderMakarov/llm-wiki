@@ -35,6 +35,7 @@ from llmwiki import REPO_ROOT
 # CRLF line endings — the previous local regex silently parsed
 # Windows-authored / BOM-prefixed pages as no-frontmatter, so every
 # tag-rename run skipped them.
+from llmwiki._frontmatter import _quote_list_item
 from llmwiki._frontmatter import parse_frontmatter_or_none as _parse_frontmatter
 from llmwiki._system_pages import is_archived_path
 from llmwiki.config_schedule import resolve_vault_dir
@@ -136,10 +137,14 @@ def _rewrite_frontmatter_tags(
 ) -> tuple[str, int]:
     """Return ``(new_text, change_count)`` after applying the op."""
     fm, body = _parse_frontmatter(text)
+    # #371: numeric-looking tags (``1.10``) must be written quoted or the
+    # next read coerces them to a number.
+    rename_to_q = _quote_list_item(rename_to) if rename_to else None
+    add_tag_q = _quote_list_item(add_tag) if add_tag else None
     if fm is None:
         if add_tag and add_page_field:
             # Seed frontmatter with the requested tag.
-            new_fm = f"{add_page_field}: [{add_tag}]"
+            new_fm = f"{add_page_field}: [{add_tag_q}]"
             return f"---\n{new_fm}\n---\n{text}", 1
         return text, 0
 
@@ -157,7 +162,7 @@ def _rewrite_frontmatter_tags(
             for it in items:
                 stripped = it.strip('"').strip("'")
                 if stripped == rename_from:
-                    new_items.append(rename_to)
+                    new_items.append(rename_to_q)
                     changes += 1
                 else:
                     new_items.append(it)
@@ -176,7 +181,7 @@ def _rewrite_frontmatter_tags(
                     val = stripped[1:].strip().strip('"').strip("'")
                     if val == rename_from:
                         indent = line[: len(line) - len(line.lstrip())]
-                        body_lines.append(f"{indent}- {rename_to}")
+                        body_lines.append(f"{indent}- {rename_to_q}")
                         changes += 1
                         continue
                 body_lines.append(line)
@@ -202,7 +207,7 @@ def _rewrite_frontmatter_tags(
                     if m.group("key") != add_page_field:
                         return m.group(0)
                     body_ = m.group("body").strip()
-                    new_body = f"{body_}, {add_tag}" if body_ else add_tag
+                    new_body = f"{body_}, {add_tag_q}" if body_ else add_tag_q
                     changes += 1
                     return f"{m.group('key')}: [{new_body}]"
 
@@ -215,11 +220,11 @@ def _rewrite_frontmatter_tags(
                         if m.group("key") != add_page_field:
                             return m.group(0)
                         changes += 1
-                        return m.group(0).rstrip() + f"\n  - {add_tag}\n"
+                        return m.group(0).rstrip() + f"\n  - {add_tag_q}\n"
 
                     new_fm = _BLOCK_LIST_RE.sub(_append_block, new_fm)
         else:
-            new_fm = new_fm.rstrip() + f"\n{add_page_field}: [{add_tag}]"
+            new_fm = new_fm.rstrip() + f"\n{add_page_field}: [{add_tag_q}]"
             changes += 1
 
     if changes == 0:

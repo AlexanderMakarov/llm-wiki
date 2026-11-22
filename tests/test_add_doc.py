@@ -569,6 +569,16 @@ def write_legacy_multipart_raw_doc(
     return written
 
 
+def test_frontmatter_numeric_looking_user_tags_read_back_as_text():
+    """``--tag 1.10`` / ``007`` land in raw-doc frontmatter quoted and parse back as the original strings (#371)."""
+    fm = m._frontmatter(
+        "Notes", "notes", "demo", ("1.10", "007"), "2026-11-22", "src",
+        content_sha256="abc",
+    )
+    meta, _ = parse_frontmatter(fm)
+    assert meta["tags"] == ["wiki-add", "raw-doc", "1.10", "007"]
+
+
 def test_write_single_chunk_layout_and_frontmatter(tmp_path):
     paths = write_raw_doc(_doc(), tmp_path, today="2026-07-04")
     assert paths == [tmp_path / "doc-title" / "doc-title.md"]

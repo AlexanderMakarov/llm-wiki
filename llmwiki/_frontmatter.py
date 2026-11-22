@@ -16,7 +16,9 @@ lists with `- ` bullets).
 
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -216,3 +218,24 @@ def _parse_scalar(raw: str, *, coerce_bool: bool = True) -> Any:
     except ValueError:
         pass
     return s
+
+
+def _quote_list_item(s: str) -> str:
+    """Return ``s`` as an inline-list item that :func:`_parse_scalar` reads back verbatim (#371).
+
+    A bare ``1.10`` / ``007`` / ``1e3`` would be coerced to a number on the
+    next read, so any item the parser would alter (or that has surrounding
+    whitespace) is written as a JSON-quoted string; everything else stays
+    bare so ordinary tags keep their current on-disk form.
+
+    Commas inside a tag are not supported: the inline-list reader splits on
+    every ``,``, so a value containing a comma cannot round-trip as one tag.
+    """
+    if _parse_scalar(s, coerce_bool=False) != s or s != s.strip():
+        return json.dumps(s, ensure_ascii=False)
+    return s
+
+
+def format_inline_list(items: Iterable[object]) -> str:
+    """Render ``items`` as an inline YAML list, quoting items that need it (#371)."""
+    return "[" + ", ".join(_quote_list_item(str(t)) for t in items) + "]"

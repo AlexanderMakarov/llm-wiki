@@ -7,6 +7,7 @@ import pytest
 from llmwiki import build as build_mod
 from llmwiki._frontmatter import (
     _parse_scalar,
+    format_inline_list,
     parse_frontmatter,
     parse_frontmatter_dict,
     parse_frontmatter_or_none,
@@ -129,6 +130,30 @@ def test_round_trip_simple_case():
     meta, body = parse_frontmatter(text)
     assert meta == {"title": "Round trip", "type": "source"}
     assert body.strip() == "# Body"
+
+
+# ─── #371: numeric-looking tags round-trip as text ───────────────────
+
+
+@pytest.mark.parametrize("tag", ["1.10", "007", "1e3", "2026", " padded "])
+def test_format_inline_list_round_trips_tag_text(tag):
+    """``format_inline_list`` output parses back to the exact original strings, so ``1.10`` is never read as ``1.1`` (#371)."""
+    items = ["alpha", tag, "omega"]
+    meta, _ = parse_frontmatter(f"---\ntags: {format_inline_list(items)}\n---\n")
+    assert meta["tags"] == items
+
+
+def test_format_inline_list_quotes_numeric_but_keeps_plain_tags_bare():
+    """Only items the parser would alter are quoted; ordinary tags keep their bare on-disk form (#371)."""
+    assert format_inline_list(["claude-code", "1.10", "v1.2"]) == '[claude-code, "1.10", v1.2]'
+
+
+def test_format_inline_list_does_not_support_commas_inside_tags():
+    """Commas inside a tag are unsupported: writers leave them bare and the reader splits on ``,`` (#371)."""
+    rendered = format_inline_list(["a,b"])
+    assert rendered == "[a,b]"
+    meta, _ = parse_frontmatter(f"---\ntags: {rendered}\n---\n")
+    assert meta["tags"] == ["a", "b"]
 
 
 # ─── #409 / #423: line-ending + BOM handling ─────────────────────────
