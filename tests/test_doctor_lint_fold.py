@@ -18,6 +18,7 @@ from llmwiki.doctor.checks import (
     DETECTOR_IDS,
     DETECTOR_IDS_G_TO_O,
     check_candidates_review,
+    check_duplicate_page_pairs,
     check_pipeline_backlog,
     run_checks_a_to_f,
 )
@@ -80,6 +81,13 @@ def test_detector_ids_g_to_o_subset_of_heal_kb() -> None:
     assert not missing, f"detector ids missing from heal_kb.json: {sorted(missing)}"
     missing_all = DETECTOR_IDS - catalog_ids
     assert not missing_all
+    # #365 / #418 — doctor finding for pending vocabulary-fold pairs.
+    assert "candidates.duplicate_pairs" in DETECTOR_IDS_G_TO_O
+    assert "candidates.duplicate_pairs" in catalog_ids
+    entry = kb.get("candidates.duplicate_pairs")
+    assert entry is not None
+    assert entry["area"] == "H"
+    assert entry["runner"] is None
 
 
 def test_should_skip_lint_error_lookup() -> None:
@@ -339,6 +347,56 @@ def test_candidates_review_only_when_overdue(tmp_path: Path) -> None:
     )
     findings = check_candidates_review(vault, now=now, overdue_days=30)
     assert any(f.id == "candidates.review_pending" for f in findings)
+
+
+def test_duplicate_page_pairs_finding_when_pending(tmp_path: Path) -> None:
+    """Doctor emits candidates.duplicate_pairs whenever detect finds a live pair (#365)."""
+    from tests.test_duplicate_page_pairs import (  # noqa: PLC0415
+        _make_wiki,
+        _page,
+        _write_dirty_topics_cache,
+    )
+
+    vault = tmp_path / "vault"
+    wiki = _make_wiki(
+        vault,
+        {
+            "s1": ["wgctl", "Widget"],
+            "s2": ["WGCTL", "Widget"],
+            "s3": ["Widget CLI", "Widget"],
+        },
+    )
+    _page(wiki, "entities", "wgctl", page_type="entity")
+    _page(wiki, "entities", "Widget CLI", page_type="entity")
+    _write_dirty_topics_cache(
+        wiki,
+        [
+            {
+                "canonical": "Widget CLI",
+                "description": "CLI tool.",
+                "aliases": ["wgctl", "WGCTL"],
+            },
+            {"canonical": "Widget", "aliases": []},
+        ],
+    )
+
+    findings = check_duplicate_page_pairs(vault)
+    assert len(findings) == 1
+    assert findings[0].id == "candidates.duplicate_pairs"
+    assert "1 possible duplicate page pair" in findings[0].message
+    assert "candidates list" in findings[0].message
+
+
+def test_duplicate_page_pairs_silent_when_none(tmp_path: Path) -> None:
+    """No pending vocabulary-fold pairs → doctor emits no candidates.duplicate_pairs."""
+    vault = _scaffold_vault(tmp_path / "vault")
+    entities = vault / "wiki" / "entities"
+    entities.mkdir(parents=True)
+    (entities / "Only.md").write_text(
+        "---\ntitle: Only\ntype: entity\n---\n\n# Only\n",
+        encoding="utf-8",
+    )
+    assert check_duplicate_page_pairs(vault) == []
 
 
 def test_check_includes_index_sync_when_healthy_env(

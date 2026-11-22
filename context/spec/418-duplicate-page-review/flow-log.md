@@ -26,3 +26,21 @@
 - tasks.md written (7 slices; testing-expert on Slice 7)
 - Informational summary only (draft Approve suppressed under /implement-feature)
 - Next: commit-specs then /awos:implement
+
+## commit-specs
+- Commit 0b902f1 docs: add spec for #365 duplicate curated page review
+
+## implement
+- All 7 slices complete (detect/ledger, merge_pages, batch/CLI, candidates.html, consolidation constraints, doctor/lint/docs, acceptance)
+- Next: verify evidence + user smoke confirm (Step 8)
+
+## verify / smoke
+- Live vault (operator-authorized): list 4 pairs; lint 4 info; doctor candidates.duplicate_pairs; build OK; candidates.html Possible duplicate pages (4)
+- User asked agent to run smoke; confirmed OK → local review
+
+## local-review
+- review.md written; verdict Comment; Blockers 0, Nits 3
+- Path: context/spec/418-duplicate-page-review/review.md
+- keep/drop: keep all (user: 1) — applied Nit 1 (cli.md / CHANGELOG / UPGRADING JSON shape) + Nit 2 (dismissal-ledger keep_distinct docs); Nit 3 = stage untracked at commit
+- Issue link keyword for PR: Closes #365 (full delivery of issue-owned ACs)
+- Next: static gate then commit-push

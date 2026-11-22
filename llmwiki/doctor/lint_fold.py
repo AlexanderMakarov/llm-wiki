@@ -44,6 +44,11 @@ RULE_HUMAN_FIX: dict[str, str] = {
         "Merge or remove the duplicate page: keep one canonical page, retarget "
         "links, or discard the weaker stub via llmwiki candidates."
     ),
+    "duplicate_page_pairs": (
+        "Review Possible duplicate pages on llmwiki candidates list or "
+        "site/candidates.html — merge-pages one into the other, or keep-distinct "
+        "so the pair stops resurfacing."
+    ),
     "frontmatter_completeness": (
         "Fill missing frontmatter fields on the named page (title, type, tags/topics, "
         "last_updated as required for that page kind)."

@@ -1,6 +1,7 @@
-"""Unit tests for ``llmwiki.dismissal_ledger`` — dismissals.json SoT (#326).
+"""Unit tests for ``llmwiki.dismissal_ledger`` — dismissals.json SoT (#326 / #418).
 
 # @spec: 326-harvest-discard-reason-surface
+# @spec: 418-duplicate-page-review
 """
 
 from __future__ import annotations
@@ -14,13 +15,16 @@ from llmwiki.dismissal_ledger import (
     LEDGER_FILENAME,
     archive_candidates_dir,
     empty_ledger,
+    is_keep_distinct_pair,
     iter_dismissals,
+    iter_keep_distinct,
     iter_merges,
     ledger_path,
     load_ledger,
     rebuild_ledger_from_archive,
     save_ledger,
     upsert_dismissal,
+    upsert_keep_distinct,
     upsert_merge,
 )
 from llmwiki.wikilinks import norm_page_key
@@ -222,3 +226,172 @@ def test_corrupt_ledger_fails_loud(tmp_path: Path):
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(json.JSONDecodeError):
         load_ledger(wiki)
+
+
+# ─── keep_distinct (#418) ───────────────────────────────────────────────
+
+
+def test_empty_ledger_includes_keep_distinct_array():
+    """Fresh ledgers carry keep_distinct so coerce/load never invent a missing key."""
+    assert empty_ledger()["keep_distinct"] == []
+
+
+def test_upsert_keep_distinct_creates_and_round_trips(tmp_path: Path):
+    """Upserting a keep-distinct pair writes an unordered key and reads back."""
+    wiki = tmp_path / "wiki"
+    _archive_root(wiki)
+    rec = upsert_keep_distinct(
+        wiki,
+        a="Widget CLI",
+        b="wgctl",
+        why="different tools",
+        decided_at="2026-03-01T12:00:00+00:00",
+    )
+    lo, hi = sorted((norm_page_key("Widget CLI"), norm_page_key("wgctl")))
+    assert rec["key"] == f"{lo}|{hi}"
+    assert {rec["a"], rec["b"]} == {"Widget CLI", "wgctl"}
+    assert rec["why"] == "different tools"
+    assert list(iter_keep_distinct(wiki)) == [rec]
+    data = json.loads(ledger_path(wiki).read_text(encoding="utf-8"))
+    assert data["keep_distinct"] == [rec]
+
+
+def test_upsert_keep_distinct_is_idempotent_on_unordered_pair(tmp_path: Path):
+    """(a,b) and (b,a) share one key; a second upsert replaces why/decided_at."""
+    wiki = tmp_path / "wiki"
+    _archive_root(wiki)
+    first = upsert_keep_distinct(
+        wiki,
+        a="AlphaTool",
+        b="BetaTool",
+        why="old",
+        decided_at="2026-01-01T00:00:00+00:00",
+    )
+    second = upsert_keep_distinct(
+        wiki,
+        a="BetaTool",
+        b="AlphaTool",
+        why="new reason",
+        decided_at="2026-02-01T00:00:00+00:00",
+    )
+    rows = list(iter_keep_distinct(wiki))
+    assert len(rows) == 1
+    assert rows[0]["key"] == first["key"] == second["key"]
+    assert rows[0]["why"] == "new reason"
+    assert rows[0]["decided_at"] == "2026-02-01T00:00:00+00:00"
+    assert is_keep_distinct_pair(wiki, "AlphaTool", "BetaTool")
+    assert is_keep_distinct_pair(wiki, "BetaTool", "AlphaTool")
+
+
+def test_is_keep_distinct_pair_false_for_unknown_or_same_identity(tmp_path: Path):
+    """Unknown pairs and same-folded names are never keep-distinct."""
+    wiki = tmp_path / "wiki"
+    _archive_root(wiki)
+    upsert_keep_distinct(wiki, a="Alpha", b="Beta", why="")
+    assert not is_keep_distinct_pair(wiki, "Alpha", "Gamma")
+    assert not is_keep_distinct_pair(wiki, "Alpha", "alpha")
+    assert not is_keep_distinct_pair(wiki, "", "Beta")
+
+
+def test_upsert_keep_distinct_rejects_same_folded_identity(tmp_path: Path):
+    """Cannot record keep-distinct when both sides fold to one page key."""
+    wiki = tmp_path / "wiki"
+    _archive_root(wiki)
+    with pytest.raises(ValueError, match="distinct page identities"):
+        upsert_keep_distinct(wiki, a="OpenClaw", b="open-claw")
+
+
+def test_load_ledger_coerces_missing_keep_distinct_to_empty(tmp_path: Path):
+    """Pre-#418 dismissals.json without keep_distinct still loads cleanly."""
+    wiki = tmp_path / "wiki"
+    path = ledger_path(wiki)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"version": 1, "dismissals": [], "merges": []}) + "\n",
+        encoding="utf-8",
+    )
+    ledger = load_ledger(wiki)
+    assert ledger["keep_distinct"] == []
+
+
+def test_load_ledger_coerces_keep_distinct_key_from_names(tmp_path: Path):
+    """A keep_distinct row with empty key derives the stable unordered pair key."""
+    wiki = tmp_path / "wiki"
+    path = ledger_path(wiki)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "dismissals": [],
+                "merges": [],
+                "keep_distinct": [
+                    {
+                        "key": "",
+                        "a": "BetaTool",
+                        "b": "AlphaTool",
+                        "decided_at": "2026-03-01T00:00:00+00:00",
+                        "why": "distinct",
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rows = list(iter_keep_distinct(wiki))
+    assert len(rows) == 1
+    lo, hi = sorted((norm_page_key("AlphaTool"), norm_page_key("BetaTool")))
+    assert rows[0]["key"] == f"{lo}|{hi}"
+    assert rows[0]["a"] == "AlphaTool"
+    assert rows[0]["b"] == "BetaTool"
+    # Folded spellings of the same pair still match the derived key.
+    assert is_keep_distinct_pair(wiki, "AlphaTool", "BetaTool")
+    assert is_keep_distinct_pair(wiki, "beta-tool", "alpha tool")
+
+
+def test_load_ledger_rejects_non_array_keep_distinct(tmp_path: Path):
+    """Malformed keep_distinct (not a list) fails loud like other ledger arrays."""
+    wiki = tmp_path / "wiki"
+    path = ledger_path(wiki)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "dismissals": [],
+                "merges": [],
+                "keep_distinct": {"a": "X", "b": "Y"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="keep_distinct must be arrays"):
+        load_ledger(wiki)
+
+
+def test_rebuild_preserves_existing_keep_distinct_rows(tmp_path: Path):
+    """Archive rebuild never invents keep_distinct but keeps operator rows."""
+    wiki = tmp_path / "wiki"
+    archive = _archive_root(wiki)
+    _write_stub(
+        archive,
+        "2026-03-01T12-00-00/Noise.md",
+        title="Noise",
+        reason="hosting detail, not subject matter",
+    )
+    upsert_keep_distinct(
+        wiki,
+        a="Alpha",
+        b="Beta",
+        why="operator decision",
+        decided_at="2026-03-01T12:00:00+00:00",
+    )
+    before = list(iter_keep_distinct(wiki))
+    assert len(before) == 1
+
+    rebuilt = rebuild_ledger_from_archive(wiki)
+    assert rebuilt["keep_distinct"] == before
+    assert list(iter_keep_distinct(wiki)) == before
+    assert len(rebuilt["dismissals"]) == 1

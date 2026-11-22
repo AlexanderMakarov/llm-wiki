@@ -48,6 +48,7 @@ from llmwiki.lint import (
     rules,  # noqa: F401
 )
 from llmwiki.synth.base import BaseSynthesizer, DummySynthesizer
+from llmwiki.topics_consolidate import CACHE_VERSION, cache_path
 from llmwiki.wikilinks import (
     build_page_alias_map,
     parse_page_aliases,
@@ -303,12 +304,107 @@ def test_cli_list_json_includes_prior_dismissal(tmp_path: Path, capsys):
     ])
     assert args.func(args) == 0
     payload = json.loads(capsys.readouterr().out)
-    by_slug = {row["slug"]: row for row in payload}
+    by_slug = {row["slug"]: row for row in payload["candidates"]}
     prior = by_slug["FooBars"]["prior_dismissal"]
     assert prior["name"] == "Foobar"
     assert prior["reason"] == "hosting detail, not subject matter"
     assert prior["ratio"] >= 0.90
     assert "abs_path" not in by_slug["FooBars"]
+    assert "duplicate_pairs" in payload
+    assert isinstance(payload["duplicate_pairs"], list)
+
+
+def _seed_duplicate_curated_pair(wiki: Path) -> None:
+    """Two live entities folded onto one topic so ``candidates list`` shows a pair."""
+    src = wiki / "sources" / "proj"
+    src.mkdir(parents=True, exist_ok=True)
+    for stem, links in {
+        "s1": ["wgctl", "Widget"],
+        "s2": ["WGCTL", "Widget"],
+        "s3": ["Widget CLI", "Widget"],
+    }.items():
+        body_links = " ".join(f"[[{t}]]" for t in links)
+        (src / f"{stem}.md").write_text(
+            f"---\ntitle: {stem}\nproject: proj\n"
+            f"source_file: raw/sessions/2026-01-01T00-00-proj-{stem}.md\n"
+            f"---\n\n## Summary\n{body_links}\n",
+            encoding="utf-8",
+        )
+    for name in ("wgctl", "Widget CLI"):
+        (wiki / "entities" / f"{name}.md").write_text(
+            f'---\ntitle: "{name}"\ntype: entity\nstatus: reviewed\n---\n\n# {name}\n',
+            encoding="utf-8",
+        )
+    # Dirty pre-repair cache: parse_and_cache would detach curated↔curated (#365).
+    cache_path(wiki).write_text(
+        json.dumps(
+            {
+                "version": CACHE_VERSION,
+                "topics": [
+                    {
+                        "canonical": "Widget CLI",
+                        "description": "CLI tool.",
+                        "aliases": ["wgctl", "WGCTL"],
+                    },
+                    {"canonical": "Widget", "aliases": []},
+                ],
+                "dropped": [],
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_cli_list_includes_possible_duplicate_pages(tmp_path: Path, capsys) -> None:
+    """Human ``candidates list`` prints Possible duplicate pages with both titles.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "PendingStub")
+    _seed_duplicate_curated_pair(wiki)
+
+    args = build_parser().parse_args([
+        "candidates", "list", "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+    assert "1 pending candidate(s):" in out
+    assert "[entities ] PendingStub" in out
+    assert "Possible duplicate pages (1):" in out
+    assert "wgctl" in out
+    assert "Widget CLI" in out
+    assert "CLI tool." in out
+
+
+def test_cli_list_json_includes_duplicate_pair_details(tmp_path: Path, capsys) -> None:
+    """``candidates list --json`` embeds a non-empty duplicate_pairs array with sides.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "PendingStub")
+    _seed_duplicate_curated_pair(wiki)
+
+    args = build_parser().parse_args([
+        "candidates", "list", "--json", "--wiki-dir", str(wiki),
+    ])
+    assert args.func(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert {c["slug"] for c in payload["candidates"]} == {"PendingStub"}
+    pairs = payload["duplicate_pairs"]
+    assert len(pairs) == 1
+    pair = pairs[0]
+    titles = {pair["a"]["title"], pair["b"]["title"]}
+    assert titles == {"wgctl", "Widget CLI"}
+    assert pair["description"] == "CLI tool."
+    assert pair["suspicion"] == "folded onto other curated page"
+    assert set(pair["paths"]) == {
+        "wiki/entities/wgctl.md",
+        "wiki/entities/Widget CLI.md",
+    }
 
 
 # ─── promote ────────────────────────────────────────────────────────

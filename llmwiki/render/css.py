@@ -719,18 +719,20 @@ kbd { display: inline-block; padding: 2px 6px; font-family: var(--mono); font-si
 .cand-prior-dismissals { margin-top: 0.35rem; font-size: 0.82rem; }
 .cand-prior-dismissals-list { margin: 0.15rem 0 0 1.1rem; padding: 0; }
 .cand-prior-dismissals-list li { margin: 0.1rem 0; }
-.cand-intent { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
-.cand-intent label { display: inline-flex; gap: 6px; align-items: center; font-size: 0.82rem; }
+.cand-intent, .cand-dup-intent { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.cand-intent label, .cand-dup-intent label { display: inline-flex; gap: 6px; align-items: center; font-size: 0.82rem; }
 /* An authored display beats the hidden attribute, which only works through
    the UA stylesheet. Without this the conditional Into and Reason fields
    render on every row whatever the decision is. */
 .cand-intent label[hidden] { display: none; }
-.cand-decision, .cand-merge-into, .cand-discard-reason {
+.cand-decision, .cand-dup-decision, .cand-merge-into, .cand-discard-reason {
   font: inherit; font-size: 0.85rem; padding: 4px 6px; color: var(--text);
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px;
 }
-.cand-intent[data-decided="yes"] { font-weight: 600; }
-.cand-intent[data-decided="yes"] .cand-decision { border-color: var(--accent); }
+.cand-intent[data-decided="yes"], .cand-dup-intent[data-decided="yes"] { font-weight: 600; }
+.cand-intent[data-decided="yes"] .cand-decision,
+.cand-dup-intent[data-decided="yes"] .cand-dup-decision { border-color: var(--accent); }
+.cand-dup-vs { margin: 0.35rem 0; font-size: 0.9rem; }
 /* The merge wrap is a span, not a label, because it holds a combobox whose
    listbox is not phrasing content — so it needs the same [hidden] guard. */
 .cand-intent .cand-merge-wrap { display: inline-flex; gap: 6px; align-items: center; font-size: 0.82rem; }

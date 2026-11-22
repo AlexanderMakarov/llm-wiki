@@ -31,7 +31,7 @@
     },
     "H": {
       "title": "Candidates review",
-      "summary": "Pending candidate review that blocks the canonical loop."
+      "summary": "Pending stub review and possible duplicate live-page pairs that block the canonical loop."
     },
     "I": {
       "title": "Wiki lint / consistency",
@@ -244,6 +244,22 @@
       ],
       "message": "Candidate stubs are awaiting review and may block the canonical loop.",
       "fix": "Review with llmwiki candidates list / promote / merge / discard (or site candidates.html); apply --actions when ready. Doctor does not auto-run review decisions — they need a human.",
+      "actionable": true,
+      "severity": "warning",
+      "tier": "guided",
+      "runner": null
+    },
+    {
+      "id": "candidates.duplicate_pairs",
+      "area": "H",
+      "patterns": [
+        "possible duplicate page",
+        "duplicate page pair",
+        "Possible duplicate pages",
+        "candidates.duplicate_pairs"
+      ],
+      "message": "Live curated or project pages look like spelling/topic duplicates and still need a merge or keep-distinct decision.",
+      "fix": "Review with llmwiki candidates list or site/candidates.html (Possible duplicate pages). Decide merge-pages (one into the other) or keep-distinct, then apply --actions. Doctor does not auto-merge or mark pairs distinct — they need a human.",
       "actionable": true,
       "severity": "warning",
       "tier": "guided",

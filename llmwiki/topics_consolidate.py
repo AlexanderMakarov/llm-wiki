@@ -32,6 +32,7 @@ from typing import Any, NamedTuple
 from llmwiki import REPO_ROOT
 from llmwiki.config_schedule import resolve_vault_dir
 from llmwiki.synth.base import BackendUsageLimitError
+from llmwiki.wikilinks import norm_page_key
 
 _VALID_KINDS = frozenset({"entity", "concept"})
 
@@ -47,6 +48,10 @@ CACHE_VERSION = 2
 # mentions are noise the pass would drop anyway, and excluding them keeps the
 # single prompt to a sane size.
 _CANDIDATE_MIN_SESSIONS = 2
+
+# Live page folders whose titles stay fixed in consolidation (#365 / #418).
+# Mirrors ``DUPLICATE_REVIEW_KINDS`` in topics.py (avoid importing topics here).
+_FIXED_TITLE_KINDS = frozenset({"entities", "concepts", "projects"})
 
 # Known-names preparation (#264 / @spec: 325-known-names-prep): cross-backend
 # synthesis.known_names.* defaults. Cap bounds candidates sent to the model;
@@ -137,6 +142,165 @@ def cache_path(wiki_dir: Path | None) -> Path:
 
 def _attr(value: str) -> str:
     return value.replace('"', "").replace("{", "").replace("}", "").replace("\n", " ").strip()
+
+
+def fixed_curated_titles(wiki_dir: Path | None) -> list[tuple[str, str]]:
+    """Live fixed-title pages as ``(display_name, kind)`` pairs (#365).
+
+    Covers entities, concepts, and projects (same set as duplicate-pair
+    review). Skips ``_``-prefixed folder stubs. Deterministic: sorted by
+    display name then kind.
+    """
+    from llmwiki.graph import scan_pages  # noqa: PLC0415 — keep graph load lazy
+
+    if wiki_dir is None:
+        return []
+    seen: set[str] = set()
+    rows: list[tuple[str, str]] = []
+    for slug, page in scan_pages(wiki_dir).items():
+        kind = str(page.get("type", ""))
+        if kind not in _FIXED_TITLE_KINDS or slug.startswith("_"):
+            continue
+        title = str(page.get("title") or "").strip() or slug
+        key = norm_page_key(title)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        rows.append((title, kind))
+    rows.sort(key=lambda r: (r[0].casefold(), r[1]))
+    return rows
+
+
+def fixed_curated_title_keys(wiki_dir: Path | None) -> dict[str, str]:
+    """``norm_page_key`` → display title for live fixed pages (#365)."""
+    return {norm_page_key(title): title for title, _kind in fixed_curated_titles(wiki_dir)}
+
+
+def keep_distinct_pairs(wiki_dir: Path | None) -> list[tuple[str, str]]:
+    """Keep-distinct display pairs from the dismissal ledger (#365).
+
+    Empty when ``wiki_dir`` is missing or the ledger has no rows. Order follows
+    :func:`llmwiki.dismissal_ledger.iter_keep_distinct`.
+    """
+    if wiki_dir is None:
+        return []
+    from llmwiki.dismissal_ledger import (  # noqa: PLC0415 — avoid cycle at import
+        iter_keep_distinct,
+    )
+
+    return [(row["a"], row["b"]) for row in iter_keep_distinct(wiki_dir)]
+
+
+def keep_distinct_key_pairs(wiki_dir: Path | None) -> set[frozenset[str]]:
+    """Unordered ``norm_page_key`` pairs recorded as keep-distinct (#365)."""
+    out: set[frozenset[str]] = set()
+    for a, b in keep_distinct_pairs(wiki_dir):
+        ka, kb = norm_page_key(a), norm_page_key(b)
+        if ka and kb and ka != kb:
+            out.add(frozenset({ka, kb}))
+    return out
+
+
+def _is_forbidden_fold(
+    alias_key: str,
+    canon_key: str,
+    *,
+    fixed_keys: set[str],
+    keep_distinct: set[frozenset[str]],
+) -> bool:
+    """True when alias→canonical must be undone (curated↔curated or keep-distinct)."""
+    if not alias_key or not canon_key or alias_key == canon_key:
+        return False
+    if alias_key in fixed_keys and canon_key in fixed_keys:
+        return True
+    return frozenset({alias_key, canon_key}) in keep_distinct
+
+
+def detach_forbidden_folds(
+    topics: list[dict[str, Any]],
+    *,
+    fixed_by_key: Mapping[str, str],
+    keep_distinct: set[frozenset[str]],
+) -> list[dict[str, Any]]:
+    """Undo alias folds that map curated↔curated or keep-distinct partners (#365).
+
+    Pure / deterministic: does not call an LLM. Each forbidden alias is removed
+    from its host topic and promoted to its own ``canonical`` topic when no
+    existing topic already owns that identity. Folds of a curated spelling onto
+    a page-less canonical are left alone (derive-time
+    :func:`llmwiki.topics._keep_curated_names_on_their_pages` still renames or
+    splits those).
+    """
+    if not topics:
+        return topics
+    fixed_keys = set(fixed_by_key)
+    if not fixed_keys and not keep_distinct:
+        return topics
+
+    # Work on shallow copies so callers can pass shared lists safely.
+    cleaned: list[dict[str, Any]] = []
+    detached_names: list[str] = []
+    for raw in topics:
+        entry = dict(raw)
+        canon = str(entry.get("canonical", "")).strip()
+        canon_key = norm_page_key(canon)
+        aliases_in = [
+            str(a).strip() for a in (entry.get("aliases") or []) if str(a).strip()
+        ]
+        kept: list[str] = []
+        for alias in aliases_in:
+            alias_key = norm_page_key(alias)
+            if _is_forbidden_fold(
+                alias_key,
+                canon_key,
+                fixed_keys=fixed_keys,
+                keep_distinct=keep_distinct,
+            ):
+                detached_names.append(fixed_by_key.get(alias_key, alias))
+            else:
+                kept.append(alias)
+        entry["aliases"] = kept
+        cleaned.append(entry)
+
+    if not detached_names:
+        return cleaned
+
+    owned_keys = {
+        norm_page_key(str(t.get("canonical", "")))
+        for t in cleaned
+        if str(t.get("canonical", "")).strip()
+    }
+    for name in detached_names:
+        key = norm_page_key(name)
+        if not key or key in owned_keys:
+            continue
+        cleaned.append(
+            {
+                "canonical": name,
+                "description": "",
+                "aliases": [],
+                "distinct_from": [],
+            }
+        )
+        owned_keys.add(key)
+    return cleaned
+
+
+def apply_consolidation_constraints(
+    topics: list[dict[str, Any]],
+    wiki_dir: Path | None,
+) -> list[dict[str, Any]]:
+    """Detach forbidden folds using live pages + keep-distinct ledger (#365).
+
+    Shared by :func:`parse_and_cache` (persist cleaned topics) and
+    :func:`load_cache` (in-memory repair when prepare skipped the LLM on a
+    fingerprint match — no second call).
+    """
+    return detach_forbidden_folds(
+        topics,
+        fixed_by_key=fixed_curated_title_keys(wiki_dir),
+        keep_distinct=keep_distinct_key_pairs(wiki_dir),
+    )
 
 
 def build_candidates(wiki_dir: Path | None = None) -> list[dict[str, Any]]:
@@ -232,11 +396,15 @@ def render_consolidation_prompt(
     wiki_dir: Path | None = None,
     candidates: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Fill ``topic_consolidation.md``'s ``{candidates}`` with XML entries.
+    """Fill ``topic_consolidation.md`` placeholders with XML entries.
 
-    Pass an explicit ``candidates`` list (e.g. already capped) so callers and
-    tests do not re-scan the topic graph. When omitted, builds from
-    ``wiki_dir`` via :func:`build_candidates` (uncapped).
+    Injects ``{candidates}``, ``{fixed_curated_titles}`` (live entity / concept
+    / project page titles), and ``{keep_distinct}`` (ledger pairs). Pass an
+    explicit ``candidates`` list (e.g. already capped) so callers and tests do
+    not re-scan the topic graph. When omitted, builds from ``wiki_dir`` via
+    :func:`build_candidates` (uncapped). Fixed titles and keep-distinct always
+    come from ``wiki_dir`` disk / ledger — same single prepare path, no extra
+    LLM call (#365).
     """
     template = CONSOLIDATION_PROMPT_PATH.read_text(encoding="utf-8")
     rows = candidates if candidates is not None else build_candidates(wiki_dir)
@@ -250,7 +418,19 @@ def render_consolidation_prompt(
         if c.get("sample"):
             attrs += f' sample="{_attr(c["sample"])[:80]}"'
         lines.append(f"  <candidate {attrs} />")
-    return template.replace("{candidates}", "\n".join(lines))
+    fixed_lines = [
+        f'  <title name="{_attr(name)}" kind="{_attr(kind)}" />'
+        for name, kind in fixed_curated_titles(wiki_dir)
+    ]
+    kd_lines = [
+        f'  <pair a="{_attr(a)}" b="{_attr(b)}" />'
+        for a, b in keep_distinct_pairs(wiki_dir)
+    ]
+    return (
+        template.replace("{candidates}", "\n".join(lines))
+        .replace("{fixed_curated_titles}", "\n".join(fixed_lines))
+        .replace("{keep_distinct}", "\n".join(kd_lines))
+    )
 
 
 def _extract_json(text: str) -> dict[str, Any]:
@@ -386,6 +566,10 @@ def parse_and_cache(
     omits ``kind`` for an updated name that already had one, the prior ``kind``
     is kept (#257).
 
+    After merge, :func:`apply_consolidation_constraints` detaches curated↔curated
+    and keep-distinct alias folds before the write (#365) — still the same
+    single LLM reply; no second call.
+
     Returns the normalised cache dict. Raises ``ValueError`` on malformed input
     so a bad LLM response never silently writes a broken vocabulary.
     """
@@ -456,6 +640,8 @@ def parse_and_cache(
         )
     else:
         dropped = reply_dropped if isinstance(reply_dropped, list) else []
+
+    clean = apply_consolidation_constraints(clean, wiki_dir)
 
     cache: dict[str, Any] = {
         "version": CACHE_VERSION,
@@ -587,6 +773,13 @@ def prepare_known_names(
     stop the run before any page (#181); on any other failure it prints a
     warning and returns without raising so the caller can fall back to
     heuristic vocabulary injection.
+
+    Fingerprint skip (``mode=skip``) does **not** re-prompt and does **not**
+    rewrite the cache here. Fixed curated / keep-distinct constraints still
+    apply without a second LLM call: :func:`load_cache` runs
+    :func:`apply_consolidation_constraints` in memory whenever vocabulary is
+    derived, and :func:`llmwiki.topics._keep_curated_names_on_their_pages`
+    remains the derive-time belt-and-suspenders (#365).
 
     Progress / warning lines always report mode (``full`` / ``delta`` /
     ``skip``), candidates considered and sent, prompt/reply bytes, and
@@ -745,7 +938,11 @@ def prepare_known_names(
         )
 
 
-def load_cache(wiki_dir: Path | None = None) -> dict[str, Any] | None:
+def load_cache(
+    wiki_dir: Path | None = None,
+    *,
+    apply_constraints: bool = True,
+) -> dict[str, Any] | None:
     """Load the consolidation cache, or ``None`` when absent/unreadable.
 
     Returns ``{"topics": [...], "alias_map": {lower_spelling: canonical},
@@ -754,6 +951,17 @@ def load_cache(wiki_dir: Path | None = None) -> dict[str, Any] | None:
     topics whose cached ``kind`` is in :data:`_VALID_KINDS`. v1 files (no
     fingerprint) still expose those consumer fields; v2 may also include
     ``inputs_fingerprint``. Per-topic ``source_sig`` stays on each topic dict.
+
+    When ``apply_constraints`` is true (default), runs
+    :func:`apply_consolidation_constraints` in memory before building
+    ``alias_map`` so a fingerprint-skip prepare (no LLM rewrite) still cannot
+    fold curated↔curated or keep-distinct partners into vocabulary derive
+    (#365). Disk is left unchanged on load; the next successful
+    :func:`parse_and_cache` persists a cleaned topic list.
+
+    Pass ``apply_constraints=False`` for read-only inspectors (e.g. duplicate
+    pair detection) that must observe pre-repair folds on a legacy or
+    hand-seeded cache.
     """
     p = cache_path(wiki_dir)
     if not p.is_file():
@@ -762,7 +970,10 @@ def load_cache(wiki_dir: Path | None = None) -> dict[str, Any] | None:
         raw = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    topics = raw.get("topics") or []
+    topics_raw = raw.get("topics") or []
+    topics = [dict(t) for t in topics_raw if isinstance(t, Mapping)]
+    if apply_constraints:
+        topics = apply_consolidation_constraints(topics, wiki_dir)
     alias_map: dict[str, str] = {}
     descriptions: dict[str, str] = {}
     kinds: dict[str, str] = {}

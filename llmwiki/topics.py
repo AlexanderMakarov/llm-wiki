@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from llmwiki.candidates import discarded_names
+from llmwiki.dismissal_ledger import is_keep_distinct_pair
 from llmwiki.graph import WIKI_DIR, scan_pages
 from llmwiki.topics_consolidate import load_cache
 from llmwiki.wikilinks import build_page_alias_map, norm_page_key, strip_anchor
@@ -237,11 +238,19 @@ def derive_vocabulary(
     return ordered, raw_to_canonical
 
 
-def _load_consolidation_cache(wiki_dir: Path | None):
-    """Load the consolidation cache, swallowing any import/IO error."""
-    try:
+def _load_consolidation_cache(
+    wiki_dir: Path | None,
+    *,
+    apply_constraints: bool = True,
+):
+    """Load the consolidation cache, swallowing any import/IO error.
 
-        return load_cache(wiki_dir)
+    ``apply_constraints`` is forwarded to :func:`load_cache` (default True for
+    derive). Duplicate-pair detection passes False so it can still surface
+    curated↔curated folds on a legacy/dirty cache (#365).
+    """
+    try:
+        return load_cache(wiki_dir, apply_constraints=apply_constraints)
     except Exception:
         return None
 
@@ -259,6 +268,10 @@ KIND_OTHER = "other"
 # these two qualify for the `include_curated_pages` bypass below.
 CURATED_KIND_FOLDERS = frozenset({"entities", "concepts"})
 
+# Live page kinds considered for duplicate-pair review (#365). Wider than
+# :data:`CURATED_KIND_FOLDERS` (graph seeding stays entities/concepts only).
+DUPLICATE_REVIEW_KINDS = frozenset({"entities", "concepts", "projects"})
+
 
 @dataclass(frozen=True, slots=True)
 class TopicPage:
@@ -270,6 +283,31 @@ class TopicPage:
     last_updated: str | None = None
     site_url: str | None = None
     title: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class DuplicatePageSide:
+    """One live page in a suspected duplicate pair."""
+
+    title: str
+    kind: str
+    slug: str
+    path: str
+    session_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class DuplicatePagePair:
+    """Undirected suspected duplicate of two live curated/project pages (#365).
+
+    ``paths`` is the stable key: ``frozenset`` of the two ``wiki/...`` paths.
+    """
+
+    paths: frozenset[str]
+    a: DuplicatePageSide
+    b: DuplicatePageSide
+    description: str
+    suspicion: str
 
 
 def topic_kind_lookup(wiki_dir: Path | None = None) -> dict[str, TopicPage]:
@@ -356,6 +394,95 @@ def _curated_pages(lookup: dict[str, TopicPage]) -> dict[str, TopicPage]:
     return curated
 
 
+def _pages_by_norm_key(
+    index: dict[str, TopicPage],
+    kinds: Collection[str],
+) -> dict[str, TopicPage]:
+    """Map :func:`norm_page_key` of each page's slug/title → that page.
+
+    Only pages whose ``kind`` is in ``kinds`` are included; ``_``-prefixed
+    folder stubs are skipped. First spelling wins per key.
+    """
+    by_key: dict[str, TopicPage] = {}
+    for record in index.values():
+        if record.kind not in kinds or record.slug.startswith("_"):
+            continue
+        for name in (record.slug, record.title):
+            key = norm_page_key(name)
+            if key:
+                by_key.setdefault(key, record)
+    return by_key
+
+
+@dataclass(frozen=True, slots=True)
+class _CuratedFoldAnalysis:
+    """Fold situations among live pages in a kind set vs ``raw_to_canonical``.
+
+    Shared by :func:`_keep_curated_names_on_their_pages` and
+    :func:`detect_duplicate_pairs` so fold rules live in one place.
+    """
+
+    named_pages: dict[str, TopicPage]
+    page_canonical: dict[str, str]
+    by_canonical: dict[str, list[str]]
+    #: ``(raw, page, origin)`` — dropped spelling or fold onto another page.
+    moves: list[tuple[str, TopicPage, str]]
+    #: Page-less canonical → curated spellings claiming it.
+    claims: dict[str, list[tuple[str, TopicPage]]]
+    #: ``(raw, page, canonical, owner)`` when folded onto a different live page.
+    cross_page: list[tuple[str, TopicPage, str, TopicPage]]
+
+
+def _analyze_curated_folds(
+    raw_sessions: dict[str, set[str]],
+    raw_to_canonical: dict[str, str],
+    index: dict[str, TopicPage],
+    *,
+    kinds: Collection[str],
+    skip: Callable[[str], bool],
+) -> _CuratedFoldAnalysis:
+    """Find spellings that name a live page but fold onto another topic (#362/#365).
+
+    A spelling matches a page by :func:`norm_page_key`; topics resolve through
+    ``index``. ``skip`` names spellings a reviewer already settled.
+    """
+    named_pages = _pages_by_norm_key(index, kinds)
+    page_canonical: dict[str, str] = {}
+    by_canonical: dict[str, list[str]] = defaultdict(list)
+    for raw, canonical in raw_to_canonical.items():
+        by_canonical[canonical].append(raw)
+        owner = index.get(canonical.strip().lower())
+        if owner is not None:
+            page_canonical.setdefault(owner.path, canonical)
+
+    moves: list[tuple[str, TopicPage, str]] = []
+    claims: dict[str, list[tuple[str, TopicPage]]] = defaultdict(list)
+    cross_page: list[tuple[str, TopicPage, str, TopicPage]] = []
+    for raw in raw_sessions:
+        page = named_pages.get(norm_page_key(raw))
+        if page is None or skip(raw):
+            continue
+        canonical = raw_to_canonical.get(raw)
+        if canonical is None:
+            moves.append((raw, page, raw))
+            continue
+        owner = index.get(canonical.strip().lower())
+        if owner is None:
+            claims[canonical].append((raw, page))
+        elif owner.path != page.path:
+            moves.append((raw, page, canonical))
+            cross_page.append((raw, page, canonical, owner))
+
+    return _CuratedFoldAnalysis(
+        named_pages=named_pages,
+        page_canonical=page_canonical,
+        by_canonical=dict(by_canonical),
+        moves=moves,
+        claims=dict(claims),
+        cross_page=cross_page,
+    )
+
+
 def _keep_curated_names_on_their_pages(
     raw_sessions: dict[str, set[str]],
     raw_to_canonical: dict[str, str],
@@ -378,37 +505,15 @@ def _keep_curated_names_on_their_pages(
     Mutates ``raw_to_canonical``. Returns cache descriptions carried over to
     page topics the cache never named, keyed by the new canonical.
     """
-    curated: dict[str, TopicPage] = {}
-    for record in index.values():
-        if record.kind not in CURATED_KIND_FOLDERS or record.slug.startswith("_"):
-            continue
-        for name in (record.slug, record.title):
-            if norm_page_key(name):
-                curated.setdefault(norm_page_key(name), record)
-    page_canonical: dict[str, str] = {}
-    by_canonical: dict[str, list[str]] = defaultdict(list)
-    for raw, canonical in raw_to_canonical.items():
-        by_canonical[canonical].append(raw)
-        owner = index.get(canonical.strip().lower())
-        if owner is not None:
-            page_canonical.setdefault(owner.path, canonical)
-
-    moves: list[tuple[str, TopicPage, str]] = []
-    claims: dict[str, list[tuple[str, TopicPage]]] = defaultdict(list)
-    for raw in raw_sessions:
-        page = curated.get(norm_page_key(raw))
-        if page is None or skip(raw):
-            continue
-        canonical = raw_to_canonical.get(raw)
-        if canonical is None:
-            moves.append((raw, page, raw))
-            continue
-        owner = index.get(canonical.strip().lower())
-        if owner is None:
-            claims[canonical].append((raw, page))
-        elif owner.path != page.path:
-            moves.append((raw, page, canonical))
-
+    analysis = _analyze_curated_folds(
+        raw_sessions,
+        raw_to_canonical,
+        index,
+        kinds=CURATED_KIND_FOLDERS,
+        skip=skip,
+    )
+    page_canonical = dict(analysis.page_canonical)
+    moves = list(analysis.moves)
     carried: dict[str, str] = {}
 
     def _page_topic(page: TopicPage, origin: str) -> str:
@@ -417,16 +522,179 @@ def _keep_curated_names_on_their_pages(
             carried.setdefault(canonical, descriptions[origin])
         return canonical
 
-    for canonical, claimants in claims.items():
+    for canonical, claimants in analysis.claims.items():
         if len({page.path for _, page in claimants}) == 1:
             target = _page_topic(claimants[0][1], canonical)
-            for raw in by_canonical[canonical]:
+            for raw in analysis.by_canonical[canonical]:
                 raw_to_canonical[raw] = target
         else:
             moves.extend((raw, page, canonical) for raw, page in claimants)
     for raw, page, origin in moves:
         raw_to_canonical[raw] = _page_topic(page, origin)
     return carried
+
+
+def _page_session_count(
+    page: TopicPage,
+    named_pages: dict[str, TopicPage],
+    raw_sessions: dict[str, set[str]],
+) -> int:
+    """Sessions that mention a spelling whose ``norm_page_key`` names ``page``."""
+    sessions: set[str] = set()
+    for raw, sess in raw_sessions.items():
+        owner = named_pages.get(norm_page_key(raw))
+        if owner is not None and owner.path == page.path:
+            sessions |= sess
+    return len(sessions)
+
+
+def _duplicate_side(
+    page: TopicPage,
+    named_pages: dict[str, TopicPage],
+    raw_sessions: dict[str, set[str]],
+) -> DuplicatePageSide:
+    return DuplicatePageSide(
+        title=page.title or page.slug,
+        kind=page.kind,
+        slug=page.slug,
+        path=page.path,
+        session_count=_page_session_count(page, named_pages, raw_sessions),
+    )
+
+
+def _pair_from_pages(
+    left: TopicPage,
+    right: TopicPage,
+    *,
+    named_pages: dict[str, TopicPage],
+    raw_sessions: dict[str, set[str]],
+    description: str,
+    suspicion: str,
+) -> DuplicatePagePair:
+    a_page, b_page = sorted((left, right), key=lambda p: p.path)
+    return DuplicatePagePair(
+        paths=frozenset({a_page.path, b_page.path}),
+        a=_duplicate_side(a_page, named_pages, raw_sessions),
+        b=_duplicate_side(b_page, named_pages, raw_sessions),
+        description=description,
+        suspicion=suspicion,
+    )
+
+
+def detect_duplicate_pairs(wiki_dir: Path | None = None) -> list[DuplicatePagePair]:
+    """Suspected duplicate live pages from vocabulary folds (#365).
+
+    Read-only: uses the consolidation cache + similarity heuristic the same
+    way :func:`derive_vocabulary` does *before* curated-name keep. A pair is
+    suspected when a spelling that titles one page in
+    :data:`DUPLICATE_REVIEW_KINDS` folds onto another such page, or when two
+    or more such pages share a page-less topic. Pairs recorded as keep-distinct
+    in the dismissal ledger are omitted. No LLM call.
+    """
+    pages = scan_pages(wiki_dir)
+    sessions = _session_pages(wiki_dir, pages)
+    raw_sessions: dict[str, set[str]] = defaultdict(set)
+    for slug, page in sessions.items():
+        for raw in page.get("out_links", ()):
+            t = strip_anchor(str(raw))
+            if t:
+                raw_sessions[t].add(slug)
+
+    # Unconstrained: observe pre-repair folds. Derive uses constrained load +
+    # _keep_curated_names_on_their_pages; detection must see the dirty map.
+    cache = _load_consolidation_cache(wiki_dir, apply_constraints=False)
+    alias_map = cache.get("alias_map", {}) if cache else {}
+    descriptions = cache.get("descriptions", {}) if cache else {}
+    dropped = {str(d).lower() for d in (cache.get("dropped", []) if cache else [])}
+
+    page_alias_map = build_page_alias_map(
+        {slug: str(page.get("body", "")) for slug, page in pages.items()}
+    )
+    redirects = {
+        norm_page_key(alias): slug
+        for alias, slug in page_alias_map.items()
+        if slug in pages and norm_page_key(alias)
+    }
+    live_keys = {norm_page_key(slug) for slug in pages} | set(redirects)
+    discarded = set(discarded_names(wiki_dir or WIKI_DIR, live_keys=live_keys))
+
+    def _reviewed(name: str) -> bool:
+        key = norm_page_key(name)
+        return key in discarded or key in redirects
+
+    heuristic_raw = {
+        t: len(s)
+        for t, s in raw_sessions.items()
+        if t.lower() not in alias_map
+        and t.lower() not in dropped
+        and not _reviewed(t)
+    }
+    raw_to_canonical = _cluster_aliases(heuristic_raw, similarity=_DEFAULT_SIMILARITY)
+    for raw in raw_sessions:
+        low = raw.lower()
+        if _reviewed(raw):
+            continue
+        if low in alias_map:
+            raw_to_canonical[raw] = alias_map[low]
+        elif low in dropped:
+            continue
+
+    index = _topic_page_index(pages)
+    analysis = _analyze_curated_folds(
+        raw_sessions,
+        raw_to_canonical,
+        index,
+        kinds=DUPLICATE_REVIEW_KINDS,
+        skip=_reviewed,
+    )
+
+    by_paths: dict[frozenset[str], DuplicatePagePair] = {}
+
+    def _remember(pair: DuplicatePagePair) -> None:
+        if is_keep_distinct_pair(
+            wiki_dir or WIKI_DIR,
+            pair.a.title,
+            pair.b.title,
+        ):
+            return
+        by_paths.setdefault(pair.paths, pair)
+
+    for _raw, page, canonical, owner in analysis.cross_page:
+        if page.path == owner.path:
+            continue
+        _remember(
+            _pair_from_pages(
+                page,
+                owner,
+                named_pages=analysis.named_pages,
+                raw_sessions=raw_sessions,
+                description=str(descriptions.get(canonical) or ""),
+                suspicion="folded onto other curated page",
+            )
+        )
+
+    for canonical, claimants in analysis.claims.items():
+        unique: dict[str, TopicPage] = {}
+        for _raw, page in claimants:
+            unique.setdefault(page.path, page)
+        pages_list = list(unique.values())
+        if len(pages_list) < 2:
+            continue
+        desc = str(descriptions.get(canonical) or "")
+        for i, left in enumerate(pages_list):
+            for right in pages_list[i + 1 :]:
+                _remember(
+                    _pair_from_pages(
+                        left,
+                        right,
+                        named_pages=analysis.named_pages,
+                        raw_sessions=raw_sessions,
+                        description=desc,
+                        suspicion="shared page-less topic",
+                    )
+                )
+
+    return sorted(by_paths.values(), key=lambda p: sorted(p.paths))
 
 
 def resolve_project_topic_urls(

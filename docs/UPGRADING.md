@@ -10,6 +10,16 @@ How to upgrade between `llmwiki` releases. Most releases are drop-in (`pip insta
 
 The canonical per-release detail is [CHANGELOG.md](https://github.com/AlexanderMakarov/llm-wiki/blob/main/CHANGELOG.md) — this guide focuses on "what might break".
 
+## Unreleased — Possible duplicate pages + `candidates list --json` shape (#365)
+
+`llmwiki candidates list --json` no longer returns a **top-level JSON array** of stub rows. It returns an object:
+
+```json
+{ "candidates": [ /* stub rows */ ], "duplicate_pairs": [ /* live page pairs */ ] }
+```
+
+Update any automation that did `for row in json.load(...)` to iterate `payload["candidates"]`. Human `list` output and `candidates apply --actions` are unchanged aside from the new `merge-pages` / `keep-distinct` verbs. Keep-distinct decisions live in `wiki/archive/candidates/dismissals.json` (`keep_distinct`); `migrate dismissal-ledger` rebuilds dismissals/merges from the archive and **preserves** existing keep-distinct rows (it never invents them).
+
 ## Unreleased — session Tokens usage store + Cursor CLI capture (#325)
 
 Analytics Tokens now prefer a single vault file `usage/session-tokens.json` (lifetime + per-agent coverage + per-day × agent buckets attributed to each session’s **last activity** UTC day). Synced session pages still show Tokens from raw frontmatter `token_totals`. Steady-state `sync` only updates new or fingerprint-changed sessions — it will **not** backfill older unchanged sessions.
