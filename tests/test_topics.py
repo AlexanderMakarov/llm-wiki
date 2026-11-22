@@ -16,6 +16,7 @@ import pytest
 
 from llmwiki.candidates import discard
 from llmwiki.candidates_harvest import harvest_targets, write_stubs
+from llmwiki.dismissal_ledger import upsert_keep_distinct
 from llmwiki.synth.pipeline import PROMPT_TEMPLATE_PATH, _inject_vocabulary
 from llmwiki.topics import (
     Topic,
@@ -1843,3 +1844,158 @@ def test_prepare_known_names_skips_when_fingerprint_matches_despite_dropped(
     assert spy.calls == 1
     prepare_known_names(wiki, spy, cfg=cfg)
     assert spy.calls == 1  # skip — not another delta for the dropped name
+
+
+# ─── #365 / #418 fixed curated titles in consolidation ───────────────────
+
+
+def test_consolidation_prompt_contains_fixed_curated_titles(tmp_path: Path) -> None:
+    """Live entity/concept/project titles appear under <fixed_curated_titles>.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["OpenClaw", "RAG", "llm-wiki"],
+            "s2": ["OpenClaw", "RAG", "llm-wiki"],
+        },
+    )
+    _topic_page(wiki, "entities", "OpenClaw", page_type="entity")
+    _topic_page(wiki, "concepts", "RAG", page_type="concept")
+    _topic_page(wiki, "projects", "llm-wiki", page_type="project")
+
+    prompt = render_consolidation_prompt(wiki)
+
+    assert "<fixed_curated_titles>" in prompt
+    assert '<title name="OpenClaw" kind="entities" />' in prompt
+    assert '<title name="RAG" kind="concepts" />' in prompt
+    assert '<title name="llm-wiki" kind="projects" />' in prompt
+    assert "<keep_distinct>" in prompt
+
+
+def test_parse_and_cache_detaches_curated_to_curated_alias_fold(
+    tmp_path: Path,
+) -> None:
+    """LLM folding one live curated title onto another is undone before disk write.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["Alpha", "Beta"],
+            "s2": ["Alpha", "Beta"],
+        },
+    )
+    _topic_page(wiki, "entities", "Alpha", page_type="entity")
+    _topic_page(wiki, "entities", "Beta", page_type="entity")
+    reply = (
+        '{"topics": [{"canonical": "Alpha", "description": "Survivor.",'
+        ' "aliases": ["Beta"]},'
+        '{"canonical": "Noise", "description": "Keep me.", "aliases": []}],'
+        ' "dropped": []}'
+    )
+
+    cache = parse_and_cache(reply, wiki)
+
+    by_canon = {t["canonical"]: t for t in cache["topics"]}
+    assert "Alpha" in by_canon and "Beta" in by_canon
+    assert "Beta" not in by_canon["Alpha"]["aliases"]
+    assert by_canon["Beta"]["aliases"] == []
+    loaded = load_cache(wiki)
+    assert loaded is not None
+    assert loaded["alias_map"].get("beta") == "Beta"
+    assert loaded["alias_map"].get("alpha") == "Alpha"
+
+
+def test_parse_and_cache_honors_keep_distinct_alias_fold(tmp_path: Path) -> None:
+    """Keep-distinct partners stay separate when the model folds one as an alias.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["wgctl", "Widget CLI"],
+            "s2": ["wgctl", "Widget CLI"],
+        },
+    )
+    upsert_keep_distinct(
+        wiki, a="wgctl", b="Widget CLI", why="different tools", decided_at="2026-01-01"
+    )
+    reply = (
+        '{"topics": [{"canonical": "wgctl", "description": "CLI.",'
+        ' "aliases": ["Widget CLI"]}],'
+        ' "dropped": []}'
+    )
+
+    cache = parse_and_cache(reply, wiki)
+
+    by_canon = {t["canonical"]: t for t in cache["topics"]}
+    assert "wgctl" in by_canon and "Widget CLI" in by_canon
+    assert "Widget CLI" not in by_canon["wgctl"]["aliases"]
+    prompt = render_consolidation_prompt(wiki)
+    assert '<pair a="wgctl" b="Widget CLI" />' in prompt
+
+
+def test_prepare_known_names_one_synthesize_with_fixed_and_keep_distinct(
+    tmp_path: Path,
+) -> None:
+    """Fixed titles + keep-distinct still use one synthesize_source_page call.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _make_wiki(
+        tmp_path,
+        {
+            "s1": ["Alpha", "Beta", "Gamma"],
+            "s2": ["Alpha", "Beta", "Gamma"],
+        },
+    )
+    _topic_page(wiki, "entities", "Alpha", page_type="entity")
+    _topic_page(wiki, "entities", "Beta", page_type="entity")
+    upsert_keep_distinct(
+        wiki, a="Beta", b="Gamma", why="keep apart", decided_at="2026-01-01"
+    )
+
+    class _Spy:
+        is_llm = True
+        timeout = 120
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.prompts: list[str] = []
+
+        def synthesize_source_page(self, raw_body, meta, prompt_template, **_kwargs):
+            self.calls += 1
+            self.prompts.append(prompt_template)
+            # Forbidden folds: curated↔curated (Beta→Alpha) and keep-distinct
+            # (Gamma→Beta). Post-process must undo both; prepare must not call again.
+            return (
+                '{"topics": [{"canonical": "Alpha", "kind": "entity",'
+                ' "description": "A.", "aliases": ["Beta"]},'
+                '{"canonical": "Beta", "kind": "entity",'
+                ' "description": "B.", "aliases": ["Gamma"]}],'
+                ' "dropped": []}'
+            )
+
+    spy = _Spy()
+    cfg = {"synthesis": {"known_names": {"candidate_cap": 150}}}
+    prepare_known_names(wiki, spy, cfg=cfg)
+    assert spy.calls == 1
+    assert '<title name="Alpha" kind="entities" />' in spy.prompts[0]
+    assert '<title name="Beta" kind="entities" />' in spy.prompts[0]
+    assert '<pair a="Beta" b="Gamma" />' in spy.prompts[0]
+
+    cache = load_cache(wiki)
+    assert cache is not None
+    by_canon = {t["canonical"]: t for t in cache["topics"]}
+    assert "Alpha" in by_canon and "Beta" in by_canon and "Gamma" in by_canon
+    assert "Beta" not in by_canon["Alpha"]["aliases"]
+    assert "Gamma" not in by_canon["Beta"]["aliases"]
+    assert cache["alias_map"].get("beta") == "Beta"
+    assert cache["alias_map"].get("gamma") == "Gamma"
+
+    prepare_known_names(wiki, spy, cfg=cfg)
+    assert spy.calls == 1  # fingerprint skip — never a second synthesize call

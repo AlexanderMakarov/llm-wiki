@@ -18,7 +18,7 @@ Every page in the site carries the same header nav. Keyboard: `⌘K` opens the c
 |---|---|---|---|
 | 1 | **Home** | `/index.html` | alerts + **Metrics** + pipeline table + ops timestamps + recent raw docs + collapsible Automation/backlog/commands |
 | 2 | **Raw** | `/raw.html` | Documents sidebar (logical docs + quick filter) + unified reader for `raw/docs/` |
-| — | **Candidates** | `/candidates.html` | what is pending under `wiki/candidates/`, a per-row Decision control, and an Apply that assembles the `candidates apply` command + JSON batch for the rows you decided |
+| — | **Candidates** | `/candidates.html` | pending stubs under `wiki/candidates/` plus Possible duplicate pages (#365), per-row Decision controls, and an Apply that assembles the `candidates apply` command + JSON batch for the rows you decided |
 | 3 | **Graph** | `/graph.html` | interactive force-directed knowledge graph (vis-network) |
 | — | **Topics** | `/topics/index.html` | every topic grouped into curated entities, curated concepts and derived topics, counted per section and ordered by reach within each |
 | 4 | **Projects** | `/projects/index.html` | filterable card grid of every project + freshness badge |
@@ -69,19 +69,19 @@ The site is only static files under `site/` — there is no separate hosted read
 
 URL: `/candidates.html`
 
-The review gate for pending stubs under `wiki/candidates/` (#97). Two tables — **Entities (pending)** and **Concepts (pending)** — each with **Name** (title, slug and age), **Description**, and **Decision**.
+The review gate for pending stubs under `wiki/candidates/` (#97) and for **Possible duplicate pages** — live entity/concept/project pairs that vocabulary folding treats as one topic (#365). Stub tables — **Entities (pending)** and **Concepts (pending)** — each have **Name** (title, slug and age), **Description**, and **Decision**. The duplicate section always ships (count may be zero) with both titles, kinds, session counts, a short description, and a Decision select.
 
-**Name** shows the title once, then a muted age line (`slug · age` only when the slug differs from the title). When the pending name near-matches one or more previously discarded subjects (#146), a muted **Prior dismissals:** list follows — each item `"<DismissedName>" — <reason>`. An empty recorded reason shows as `(discarded without explanation)`. Rows `llmwiki remove` recorded for pages it archived (reason `archived by remove: last citing source removed`) can surface here too, next to reviewer-written reasons. The list is computed at build time from `wiki/archive/candidates/dismissals.json` (same near-match rule as `candidates list`); the browser does not re-match. Merges are not treated as dismissals for this list.
+**Name** (stubs) shows the title once, then a muted age line (`slug · age` only when the slug differs from the title). When the pending name near-matches one or more previously discarded subjects (#146), a muted **Prior dismissals:** list follows — each item `"<DismissedName>" — <reason>`. An empty recorded reason shows as `(discarded without explanation)`. Rows `llmwiki remove` recorded for pages it archived (reason `archived by remove: last citing source removed`) can surface here too, next to reviewer-written reasons. The list is computed at build time from `wiki/archive/candidates/dismissals.json` (same near-match rule as `candidates list`); the browser does not re-match. Merges are not treated as dismissals for this list.
 
-**Decision** is a per-row select: *Promote*, *Flip and promote*, *Merge into…*, *Discard*, and — when the row has prior dismissals — *Discard with prior reason* (reuses the best match’s reason without retyping; still maps to a normal `discard` in the apply batch). *Merge into…* and *Discard* reveal the field that action needs; *Discard with prior reason* only reveals the optional redirect field. Every row starts at **No decision** and stays there until you choose — deciding is browser state, so nothing runs and nothing is sent.
+**Decision** on stub rows: *Promote*, *Flip and promote*, *Merge into…*, *Discard*, and — when the row has prior dismissals — *Discard with prior reason* (reuses the best match’s reason without retyping; still maps to a normal `discard` in the apply batch). *Merge into…* and *Discard* reveal the field that action needs; *Discard with prior reason* only reveals the optional redirect field. On duplicate-pair rows: *Merge A into B*, *Merge B into A*, *Keep distinct*, or leave undecided (maps to `merge-pages` / `keep-distinct` in the apply batch). Every row starts at **No decision** and stays there until you choose — deciding is browser state, so nothing runs and nothing is sent.
 
-**Apply** sits in a bar above the tables that stays pinned under the site nav while you scroll, so it is in reach from any row. It assembles the rows you decided — and only those — into the command to run and the JSON batch to pipe into it, shown directly below the bar with **Copy command** and **Copy JSON**:
+**Apply** sits in a bar above the tables that stays pinned under the site nav while you scroll, so it is in reach from any row. It assembles the stub and duplicate-page rows you decided — and only those — into the command to run and the JSON batch to pipe into it, shown directly below the bar with **Copy command** and **Copy JSON**:
 
 ```bash
 llmwiki candidates apply --vault <vault> --actions -
 ```
 
-*Merge into…* reveals a **filterable dropdown** of every page `merge --into` resolves for that table — the trusted pages under `wiki/<kind>/` first, then the same-table pending stubs. Press the ▾ button or `↓` to browse the whole list without typing, type any part of a name to narrow it (case-insensitive substring), `↑` / `↓` to move, `Enter` to choose, `Esc` to close. The list is the closed set of valid targets: text naming no page is marked as you type, and a row holding one is named on the page instead of going into a batch that would fail at the CLI.
+*Merge into…* (stubs) reveals a **filterable dropdown** of every page `merge --into` resolves for that table — the trusted pages under `wiki/<kind>/` first, then the same-table pending stubs. Press the ▾ button or `↓` to browse the whole list without typing, type any part of a name to narrow it (case-insensitive substring), `↑` / `↓` to move, `Enter` to choose, `Esc` to close. The list is the closed set of valid targets: text naming no page is marked as you type, and a row holding one is named on the page instead of going into a batch that would fail at the CLI.
 
 *Discard* reveals a **required reason**. That reason is stored in `wiki/archive/candidates/dismissals.json` with the archived stub (new discards do not write a sibling `*.reason.txt`), so a blank one throws the decision away — a row set to *Discard* with no reason is held back the same way an unresolved merge target is. Beside it, an optional **Redirect links to** field names an existing page: filled, the batch row carries `redirect` and links to the discarded name point at that page; left empty, they become plain text. `redirect` belongs to a discard, so a batch row carrying it on any other decision is refused before any row runs, and a redirect whose name another live page already answers to fails that row by name instead of quietly recording a second claim on it.
 
@@ -92,7 +92,9 @@ A row left at **No decision** is absent from the batch and stays pending, so a h
 | **promote** | Move into trusted `wiki/entities/` or `wiki/concepts/`; `status: reviewed` |
 | **flip-promote** | Wrong kind → promote into the opposite trusted folder and rewrite `type:` (do not hand-`mv` stubs between candidate folders) |
 | **discard** | Archive under `wiki/archive/candidates/`; links to it become plain text, or point at the *Redirect links to* page |
-| **merge** | Fold into another page of the same kind, then archive the stub |
+| **merge** | Fold a stub into another page of the same kind, then archive the stub |
+| **merge-pages** | Fold one live curated/project page into another (#365); survivor keeps its kind |
+| **keep-distinct** | Record the live pair as distinct so it stops resurfacing on this page / lint / doctor (#365) |
 
 ---
 

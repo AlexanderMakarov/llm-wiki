@@ -157,13 +157,13 @@ that triggers auto-ingest of new pages into `wiki/`.
 
 ### `/wiki-candidates`
 
-**What:** triage pending candidates — `promote`, `flip-promote`, `merge`, `discard`, or batch `apply --actions`.
+**What:** triage pending candidate stubs — `promote`, `flip-promote`, `merge`, `discard` — and possible duplicate live pages — `merge-pages`, `keep-distinct` — or batch both via `apply --actions`.
 
-**Wraps:** `python3 -m llmwiki candidates list` + follow-ups (`apply --actions` for batches). Same intents `site/candidates.html` lists, whose copyable batch feeds the same command.
+**Wraps:** `python3 -m llmwiki candidates list` + follow-ups (`apply --actions` for batches). Same intents `site/candidates.html` lists (stubs **and** Possible duplicate pages), whose copyable batch feeds the same command.
 
-**When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates`, or you just ran `llmwiki synth` / `synth --candidates-only`.
+**When to use:** Home **Candidates** / Analytics **Candidates to review** is non-zero, `/wiki-lint` reported `stale_candidates` or `duplicate_page_pairs`, `llmwiki doctor` reported `candidates.duplicate_pairs`, or you just ran `llmwiki synth` / `synth --candidates-only`.
 
-Promote fills an empty `## Key Facts` offline from source `fact:` bullets (and harvest stubs); Dummy / no backend is fine (#147). Prefer the CLI action for the common case. Opt-in `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all`) still needs an LLM for trusted pages with regex-era Key Facts or pasted harvest-stub `## Candidate merge` blocks. Prefer `flip-promote` over hand-moving stubs between `candidates/entities` and `candidates/concepts`.
+Promote fills an empty `## Key Facts` offline from source `fact:` bullets (and harvest stubs); Dummy / no backend is fine (#147). Prefer the CLI action for the common case. Opt-in `llmwiki candidates rewrite-key-facts --slug <Name>` (or `--all`) still needs an LLM for trusted pages with regex-era Key Facts or pasted harvest-stub `## Candidate merge` blocks. Prefer `flip-promote` over hand-moving stubs between `candidates/entities` and `candidates/concepts`. For live-page pairs (#365), choose merge one into the other or keep-distinct so the suspicion does not return.
 
 **Example:**
 
@@ -171,7 +171,7 @@ Promote fills an empty `## Key Facts` offline from source `fact:` bullets (and h
 /wiki-candidates
 ```
 
-Claude will walk the queue one at a time and offer actions per candidate.
+Claude will walk the stub queue and any Possible duplicate pages, offering actions per row.
 
 ---
 
@@ -245,6 +245,8 @@ want to re-run sync.
 18. `page_findability` *(#197)* — titled page not returned for its own title (findability key is title, not slug; prefer `[[slug|Title]]`)
 19. `title_ambiguity` *(#197)* — titled page not ranked first for its own title
 20. `search_consistency` *(#197)* — search vs literal scan; survival share is informational, not a defect
+21. `hollow_curated_pages` *(#248 amendment)*
+22. `duplicate_page_pairs` *(#365)* — vocabulary-fold live-page pairs pending review (not body-similarity `duplicate_detection`)
 
 See [`cli.md` lint](cli.md#lint--run-registered-wiki-quality-rules) for severities and findability detail.
 

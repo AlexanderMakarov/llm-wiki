@@ -24,6 +24,8 @@ Post-v1.0 rules:
   19. title_ambiguity                 (#197)
   20. search_consistency              (#197)
   21. hollow_curated_pages            (#248 amendment)
+  22. duplicate_page_pairs            (#365) — vocabulary-fold live-page pairs
+      (not body-similarity duplicate_detection)
 
 Import order matters — every per-rule module's top-level ``@register``
 decorator runs at import time and inserts its rule into the
@@ -55,6 +57,7 @@ from llmwiki.lint.rules.claim_verification import ClaimVerification  # noqa: F40
 from llmwiki.lint.rules.content_freshness import ContentFreshness  # noqa: F401
 from llmwiki.lint.rules.contradiction_detection import ContradictionDetection  # noqa: F401
 from llmwiki.lint.rules.duplicate_detection import DuplicateDetection  # noqa: F401
+from llmwiki.lint.rules.duplicate_page_pairs import DuplicatePagePairs  # noqa: F401  # #365
 
 # Rule classes — order matches the pre-split file so REGISTRY enumeration
 # is stable. Each module's top-level @register call runs at import time.

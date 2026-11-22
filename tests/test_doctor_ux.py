@@ -43,6 +43,24 @@ def test_lint_human_fix_not_address_rule() -> None:
     assert "wikilink" in finding.fix.casefold() or "link" in finding.fix.casefold()
 
 
+def test_duplicate_page_pairs_lint_fold_has_human_fix() -> None:
+    """Folded lint:duplicate_page_pairs points at candidates list / merge-pages (#365)."""
+    assert "duplicate_page_pairs" in RULE_HUMAN_FIX
+    finding = finding_from_lint_issue(
+        {
+            "rule": "duplicate_page_pairs",
+            "severity": "info",
+            "page": "entities/wgctl.md",
+            "message": "possible duplicate pages 'wgctl' and 'Widget CLI'",
+        }
+    )
+    assert finding.id.startswith("lint:")
+    assert "Address lint rule" not in finding.fix
+    fix = finding.fix.casefold()
+    assert "candidates" in fix
+    assert "merge" in fix or "keep-distinct" in fix or "keep distinct" in fix
+
+
 def test_progress_prints_ellipsis() -> None:
     buf = StringIO()
     make_progress(buf)("running wiki lint")

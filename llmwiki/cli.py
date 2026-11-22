@@ -205,6 +205,7 @@ from llmwiki.synth.reporting import (
     print_source_pages_current_state,
     print_synth_run_summary,
 )
+from llmwiki.topics import DuplicatePagePair, DuplicatePageSide, detect_duplicate_pairs
 from llmwiki.trace import TraceError, TraceResult, trace_page
 from llmwiki.usage import UNATTRIBUTED
 from llmwiki.vault import Vault, describe_vault, resolve_vault
@@ -2978,6 +2979,43 @@ def _print_skipped_pages(skipped: Iterable[str]) -> None:
         print(f"    ! {entry}", file=sys.stderr)
 
 
+def _duplicate_pair_json(pair: DuplicatePagePair) -> dict[str, Any]:
+    """JSON-serialisable shape for one suspected duplicate pair (#365)."""
+
+    def _side(side: DuplicatePageSide) -> dict[str, Any]:
+        return {
+            "title": side.title,
+            "kind": side.kind,
+            "slug": side.slug,
+            "path": side.path,
+            "session_count": side.session_count,
+        }
+
+    return {
+        "a": _side(pair.a),
+        "b": _side(pair.b),
+        "description": pair.description,
+        "suspicion": pair.suspicion,
+        "paths": sorted(pair.paths),
+    }
+
+
+def _print_duplicate_pairs(pairs: list[DuplicatePagePair]) -> None:
+    """Human-readable Possible duplicate pages block after the stub list."""
+    print(f"  Possible duplicate pages ({len(pairs)}):")
+    if not pairs:
+        return
+    for pair in pairs:
+        desc = pair.description or pair.suspicion
+        print(
+            f"    [{pair.a.kind}] {pair.a.title} "
+            f"({pair.a.session_count} sessions)  ↔  "
+            f"[{pair.b.kind}] {pair.b.title} "
+            f"({pair.b.session_count} sessions)"
+            + (f"  — {desc}" if desc else "")
+        )
+
+
 def cmd_candidates(args: argparse.Namespace) -> int:
     """List / promote / merge / discard candidate pages (v1.1.0 · #51)."""
 
@@ -2999,10 +3037,14 @@ def cmd_candidates(args: argparse.Namespace) -> int:
             stale_candidates(wiki_dir, threshold_days=args.stale_days)
             if args.stale else list_candidates(wiki_dir)
         )
+        pairs = detect_duplicate_pairs(wiki_dir)
         if args.json:
             # Path isn't JSON-serializable — drop it for the output
             cleaned = [{k: v for k, v in c.items() if k != "abs_path"} for c in items]
-            print(_json.dumps(cleaned, indent=2))
+            print(_json.dumps({
+                "candidates": cleaned,
+                "duplicate_pairs": [_duplicate_pair_json(p) for p in pairs],
+            }, indent=2))
         else:
             label = "stale" if args.stale else "pending"
             print(f"  {len(items)} {label} candidate(s):")
@@ -3017,6 +3059,7 @@ def cmd_candidates(args: argparse.Namespace) -> int:
                     for prior in priors:
                         reason = format_dismissal_reason(prior.get("reason"))
                         print(f'          - "{prior["name"]}" — {reason}')
+            _print_duplicate_pairs(pairs)
         return 0
 
     if action == "apply":
@@ -4059,7 +4102,10 @@ def build_parser() -> argparse.ArgumentParser:
     cand.add_argument("--json", action="store_true", help="JSON output for list")
     cand.add_argument(
         "--actions", type=str, default=None, metavar="JSON",
-        help="For apply: JSON array of {action,slug,kind?,into?,reason?,redirect?} "
+        help="For apply: JSON array of stub actions "
+             "{action,slug,kind?,into?,reason?,redirect?} and/or live-page "
+             "actions {action:merge-pages,from,into} / "
+             "{action:keep-distinct,a,b,why?} "
              "(the shape site/candidates.html prints); pass - to read stdin",
     )
     cand.add_argument(

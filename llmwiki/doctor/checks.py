@@ -2,7 +2,9 @@
 
 Detectors emit findings keyed by stable catalog ``id`` — no free-text
 guessing. Area I/J lint findings come from :mod:`llmwiki.doctor.lint_fold`
-(provenance via lint fold is enough for J). G/H emit only when overdue.
+(provenance via lint fold is enough for J). G and stub-review H emit only
+when overdue; ``candidates.duplicate_pairs`` (#365) emits whenever pairs
+are pending (no age threshold).
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ from llmwiki.run_outcomes import SCHEDULED_ENV
 from llmwiki.state_store import read_state, resolve_state_file
 from llmwiki.synth.base import DummySynthesizer, backend_unavailable_message
 from llmwiki.synth.pipeline import resolve_backend
+from llmwiki.topics import detect_duplicate_pairs
 
 #: Catalog ids that detectors in this module may emit (drift test target).
 DETECTOR_IDS_A_TO_F: frozenset[str] = frozenset(
@@ -62,6 +65,7 @@ DETECTOR_IDS_G_TO_O: frozenset[str] = frozenset(
     {
         "pipeline.backlog_overdue",
         "candidates.review_pending",
+        "candidates.duplicate_pairs",
         "migrate.schema_drift",
         "automation.unit_missing",
         "automation.points_elsewhere",
@@ -353,6 +357,32 @@ def check_candidates_review(
         message=(
             f"{len(stale)} candidate stub(s) overdue for review "
             f"(≥{overdue_days}d)."
+        ),
+    )
+    return [f] if f is not None else []
+
+
+def check_duplicate_page_pairs(vault: Path) -> list[Finding]:
+    """Area H — emit when live curated/project pages have pending duplicate pairs (#365).
+
+    Unlike :func:`check_candidates_review`, this fires whenever
+    :func:`detect_duplicate_pairs` returns any pair (no age threshold).
+    Keep-distinct ledger rows are already omitted by the detector.
+    """
+    wiki_dir = Path(vault) / "wiki"
+    if not wiki_dir.is_dir():
+        return []
+    pairs = detect_duplicate_pairs(wiki_dir)
+    if not pairs:
+        return []
+    n = len(pairs)
+    label = "pair" if n == 1 else "pairs"
+    f = _finding(
+        "candidates.duplicate_pairs",
+        message=(
+            f"{n} possible duplicate page {label} pending review. "
+            "Open with llmwiki candidates list or site/candidates.html "
+            "(Possible duplicate pages)."
         ),
     )
     return [f] if f is not None else []
@@ -822,6 +852,7 @@ def run_checks_g_to_o(
     findings: list[Finding] = []
     findings.extend(check_pipeline_backlog(vault, now=now))
     findings.extend(check_candidates_review(vault, now=now))
+    findings.extend(check_duplicate_page_pairs(vault))
     findings.extend(check_migrate_hints(vault))
     findings.extend(check_automation(vault, now=now))
     findings.extend(check_site_freshness(vault))

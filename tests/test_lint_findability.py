@@ -59,7 +59,7 @@ _SEARCH_RULES = ("page_findability", "title_ambiguity", "search_consistency")
 def test_search_findability_rules_registered():
     for name in _SEARCH_RULES:
         assert name in REGISTRY
-    assert len(REGISTRY) == 21
+    assert len(REGISTRY) == 22
 
 
 # ── skip when options absent ────────────────────────────────────────────

@@ -22,8 +22,9 @@ from llmwiki.build import render_candidates_page
 from llmwiki.candidates import discard
 from llmwiki.candidates_near_match import EMPTY_REASON_DISPLAY
 from llmwiki.candidates_site import (
+    _PAGE_ACTIONS,  # noqa: PLC2701
     _REVIEW_SCRIPT,  # noqa: PLC2701
-    _VALID_ACTIONS,  # noqa: PLC2701
+    _STUB_ACTIONS,  # noqa: PLC2701
     apply_candidate_actions,
     apply_command_prefix,
     candidates_payload,
@@ -34,6 +35,8 @@ from llmwiki.candidates_site import (
     validate_candidate_batch,
     vault_display_path,
 )
+from llmwiki.dismissal_ledger import is_keep_distinct_pair
+from llmwiki.topics_consolidate import CACHE_VERSION, cache_path
 from tests._paths import REPO_ROOT
 
 needs_node = pytest.mark.skipif(
@@ -73,28 +76,54 @@ function mkRow(spec) {
 }
 """
 
+_DUP_ROW_STUB = """
+function mkDupRow(spec) {
+  return {
+    getAttribute: function (name) {
+      if (name === "data-a") return spec.a;
+      if (name === "data-b") return spec.b;
+      return null;
+    },
+    querySelector: function (sel) {
+      if (sel === ".cand-dup-decision") return { value: spec.decision || "" };
+      return null;
+    }
+  };
+}
+"""
+
 def _collect_actions(
     specs: list[dict[str, str]],
     tmp_path: Path,
     targets: dict[str, list[str]] | None = None,
+    dup_specs: list[dict[str, str]] | None = None,
 ) -> dict:
-    """Run the page's own `collectActions()` over `specs` under node.
+    """Run the page's own `collectActions()` over stub and/or duplicate rows under node.
 
     `targets` is the per-kind merge target list the page embeds; by default
     every named target is offered, so a test opts in to the unlisted case.
+    `dup_specs` are Possible duplicate pages rows (``a`` / ``b`` / ``decision``).
     """
     if targets is None:
         targets = {}
         for spec in specs:
             if spec.get("into"):
                 targets.setdefault(spec["kind"], []).append(spec["into"])
+    if dup_specs is None:
+        dup_specs = []
     script = tmp_path / "collect.js"
     script.write_text(
         "\n".join([
             _ROW_STUB,
+            _DUP_ROW_STUB,
             f"var ROWS = {json.dumps(specs)}.map(mkRow);",
+            f"var DUP_ROWS = {json.dumps(dup_specs)}.map(mkDupRow);",
             f"var TARGETS = {json.dumps(targets)};",
-            'var document = { querySelectorAll: function () { return ROWS; } };',
+            "var document = { querySelectorAll: function (sel) {",
+            '  if (sel === ".cand-intent") return ROWS;',
+            '  if (sel === ".cand-dup-intent") return DUP_ROWS;',
+            "  return [];",
+            "} };",
             _js_block(_REVIEW_SCRIPT, "function decisionOf(wrap) {"),
             _js_block(_REVIEW_SCRIPT, "function rows() {"),
             _js_block(_REVIEW_SCRIPT, "function fieldValue(wrap, sel) {"),
@@ -145,6 +174,69 @@ def _write_candidate(wiki: Path, kind: str, slug: str, *, body: str = "") -> Pat
     )
     return path
 
+
+def _write_live_page(
+    wiki: Path,
+    kind: str,
+    stem: str,
+    *,
+    body: str = "",
+) -> Path:
+    """Write a reviewed curated page under ``wiki/<kind>/<stem>.md``."""
+    path = wiki / kind / f"{stem}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body_text = body or f"# {stem}\n\nLive page for {stem}."
+    path.write_text(
+        f'---\ntitle: "{stem}"\ntype: {kind[:-1]}\nstatus: reviewed\n'
+        f"last_updated: 2026-04-17\n---\n\n{body_text}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _seed_duplicate_curated_pair(wiki: Path) -> None:
+    """Two live entities folded onto one topic so the site lists a duplicate pair."""
+    src = wiki / "sources" / "proj"
+    src.mkdir(parents=True, exist_ok=True)
+    for stem, links in {
+        "s1": ["wgctl", "Widget"],
+        "s2": ["WGCTL", "Widget"],
+        "s3": ["Widget CLI", "Widget"],
+    }.items():
+        body_links = " ".join(f"[[{t}]]" for t in links)
+        (src / f"{stem}.md").write_text(
+            f"---\ntitle: {stem}\nproject: proj\n"
+            f"source_file: raw/sessions/2026-01-01T00-00-proj-{stem}.md\n"
+            f"---\n\n## Summary\n{body_links}\n",
+            encoding="utf-8",
+        )
+    for name in ("wgctl", "Widget CLI"):
+        (wiki / "entities" / f"{name}.md").write_text(
+            f'---\ntitle: "{name}"\ntype: entity\nstatus: reviewed\n---\n\n# {name}\n',
+            encoding="utf-8",
+        )
+    # Dirty pre-repair cache: parse_and_cache would detach curated↔curated (#365).
+    cache_path(wiki).write_text(
+        json.dumps(
+            {
+                "version": CACHE_VERSION,
+                "topics": [
+                    {
+                        "canonical": "Widget CLI",
+                        "description": "CLI tool.",
+                        "aliases": ["wgctl", "WGCTL"],
+                    },
+                    {"canonical": "Widget", "aliases": []},
+                ],
+                "dropped": [],
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_render_candidates_body_lists_pending_and_offers_the_batch(tmp_path: Path) -> None:
     """The candidates body lists pending entity and concept rows and offers one batch command field."""
     wiki = _mk_wiki(tmp_path)
@@ -190,7 +282,7 @@ def test_decision_vocabulary_matches_what_the_cli_accepts(tmp_path: Path) -> Non
     cell = cell[: cell.index("</select>")]
     offered = set(re.findall(r'<option value="([^"]*)"', cell))
 
-    assert offered == {"", *_VALID_ACTIONS}
+    assert offered == {"", *_STUB_ACTIONS}
 
 def test_no_row_starts_out_decided(tmp_path: Path) -> None:
     # @regression
@@ -281,7 +373,7 @@ def test_the_target_list_is_embedded_once_however_many_rows(tmp_path: Path) -> N
     assert html_out.count('class="cand-targets"') == 2
     # The only <option> elements left are the decisions themselves; the target
     # names live in the two lists, not once per row.
-    assert html_out.count("<option ") == 12 * (len(_VALID_ACTIONS) + 1)
+    assert html_out.count("<option ") == 12 * (len(_STUB_ACTIONS) + 1)
 
 def test_discard_asks_for_the_reason_it_archives(tmp_path: Path) -> None:
     # @regression
@@ -495,6 +587,380 @@ def test_apply_candidate_actions_accepts_non_conflicting_merge_and_promote(
     assert (wiki / "entities" / "Keep.md").is_file()
     assert (wiki / "entities" / "Canonical.md").is_file()
     assert not (wiki / "candidates" / "entities" / "Dupe.md").exists()
+
+
+# ─── #365 / #418 live-page actions in the same batch as stubs ───────────
+
+
+def test_validate_candidate_batch_refuses_merge_pages_plus_keep_distinct_same_pair() -> None:
+    # @spec: 418-duplicate-page-review
+    """merge-pages and keep-distinct on the same unordered pair conflict before apply."""
+    with pytest.raises(
+        ValueError,
+        match=r"batch conflict: merge-pages 'Beta' into 'Alpha'.*keep-distinct",
+    ):
+        validate_candidate_batch([
+            {
+                "action": "merge-pages",
+                "from": "Beta",
+                "into": "Alpha",
+            },
+            {
+                "action": "keep-distinct",
+                "a": "Alpha",
+                "b": "Beta",
+            },
+        ])
+
+
+def test_validate_candidate_batch_accepts_mixed_stub_and_page_actions() -> None:
+    # @spec: 418-duplicate-page-review
+    """Stub promote plus merge-pages and keep-distinct on different pairs is valid."""
+    validate_candidate_batch([
+        {"action": "promote", "slug": "NewTool", "kind": "entities"},
+        {"action": "merge-pages", "from": "Beta", "into": "Alpha"},
+        {
+            "action": "keep-distinct",
+            "a": "Gamma",
+            "b": "Delta",
+            "why": "different products",
+        },
+    ])
+
+
+def test_cli_command_for_actions_accepts_page_actions_without_slug() -> None:
+    # @spec: 418-duplicate-page-review
+    """Page verbs use from/into or a/b — the apply line must not require a stub slug."""
+    assert _PAGE_ACTIONS == frozenset({"merge-pages", "keep-distinct"})
+    cmd = cli_command_for_actions([
+        {"action": "promote", "slug": "Stub", "kind": "entities"},
+        {"action": "merge-pages", "from": "Loser", "into": "Survivor"},
+        {"action": "keep-distinct", "a": "Left", "b": "Right"},
+    ])
+    assert cmd.startswith("llmwiki candidates apply --actions '")
+    start = cmd.index("'") + 1
+    end = cmd.rindex("'")
+    payload = json.loads(cmd[start:end])
+    assert [row["action"] for row in payload] == [
+        "promote",
+        "merge-pages",
+        "keep-distinct",
+    ]
+    assert "slug" not in payload[1]
+    assert "slug" not in payload[2]
+
+
+def test_apply_candidate_actions_mixed_stub_and_page_actions(tmp_path: Path) -> None:
+    # @spec: 418-duplicate-page-review
+    """One batch promotes a stub, merges two live pages, and records keep-distinct."""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "NewTool")
+    survivor = _write_live_page(
+        wiki,
+        "entities",
+        "Alpha",
+        body="# Alpha\n\n## Key Facts\n\n- survivor fact.\n",
+    )
+    loser = _write_live_page(
+        wiki,
+        "entities",
+        "Beta",
+        body="# Beta\n\n## Key Facts\n\n- loser fact.\n",
+    )
+    _write_live_page(wiki, "entities", "Gamma")
+    _write_live_page(wiki, "entities", "Delta")
+
+    results = apply_candidate_actions(wiki, [
+        {"action": "promote", "slug": "NewTool", "kind": "entities"},
+        {"action": "merge-pages", "from": "Beta", "into": "Alpha"},
+        {
+            "action": "keep-distinct",
+            "a": "Gamma",
+            "b": "Delta",
+            "why": "different products",
+        },
+    ])
+
+    assert [r["ok"] for r in results] == [True, True, True], results
+    assert results[0]["slug"] == "NewTool"
+    assert results[1]["slug"] == "Beta"
+    assert results[2]["slug"] == "Gamma|Delta"
+    assert (wiki / "entities" / "NewTool.md").is_file()
+    assert not (wiki / "candidates" / "entities" / "NewTool.md").exists()
+    assert survivor.is_file()
+    assert not loser.exists()
+    assert (wiki / "archive" / "entities" / "Beta.md").is_file()
+    assert "loser fact" in survivor.read_text(encoding="utf-8")
+    assert is_keep_distinct_pair(wiki, "Gamma", "Delta")
+
+
+def test_apply_candidate_actions_refuses_page_action_conflict_without_mutating(
+    tmp_path: Path,
+) -> None:
+    # @spec: 418-duplicate-page-review
+    """Conflicting merge-pages + keep-distinct raises before stub or page mutation."""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "NewTool")
+    alpha = _write_live_page(wiki, "entities", "Alpha")
+    beta = _write_live_page(wiki, "entities", "Beta")
+    before_alpha = alpha.read_text(encoding="utf-8")
+
+    with pytest.raises(ValueError, match="batch conflict"):
+        apply_candidate_actions(wiki, [
+            {"action": "promote", "slug": "NewTool", "kind": "entities"},
+            {"action": "merge-pages", "from": "Beta", "into": "Alpha"},
+            {"action": "keep-distinct", "a": "Beta", "b": "Alpha"},
+        ])
+
+    assert (wiki / "candidates" / "entities" / "NewTool.md").is_file()
+    assert not (wiki / "entities" / "NewTool.md").exists()
+    assert beta.is_file()
+    assert alpha.read_text(encoding="utf-8") == before_alpha
+    assert not is_keep_distinct_pair(wiki, "Alpha", "Beta")
+
+
+def test_cli_candidates_apply_mixed_stub_and_page_actions(tmp_path: Path) -> None:
+    # @spec: 418-duplicate-page-review
+    """CLI apply runs a mixed stub + page-action batch and exits 0."""
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "NewTool")
+    _write_live_page(wiki, "entities", "Alpha")
+    _write_live_page(wiki, "entities", "Beta")
+    _write_live_page(wiki, "concepts", "Left")
+    _write_live_page(wiki, "concepts", "Right")
+    payload = json.dumps([
+        {"action": "promote", "slug": "NewTool", "kind": "entities"},
+        {"action": "merge-pages", "from": "Beta", "into": "Alpha"},
+        {"action": "keep-distinct", "a": "Left", "b": "Right"},
+    ])
+    proc = subprocess.run(
+        [
+            sys.executable, "-m", "llmwiki", "candidates", "apply",
+            "--actions", payload,
+            "--wiki-dir", str(wiki),
+            "--no-rebuild",
+        ],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
+    assert (wiki / "entities" / "NewTool.md").is_file()
+    assert not (wiki / "entities" / "Beta.md").exists()
+    assert is_keep_distinct_pair(wiki, "Left", "Right")
+
+
+# ─── #365 / #418 Possible duplicate pages (payload + HTML + Apply shapes) ─
+
+
+def test_candidates_payload_includes_duplicate_pair_sides(tmp_path: Path) -> None:
+    """Site payload carries duplicate_pairs with both sides, description, and hrefs.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _mk_wiki(tmp_path)
+    _seed_duplicate_curated_pair(wiki)
+
+    payload = candidates_payload(wiki)
+    pairs = payload["duplicate_pairs"]
+    assert len(pairs) == 1
+    pair = pairs[0]
+    titles = {pair["a"]["title"], pair["b"]["title"]}
+    assert titles == {"wgctl", "Widget CLI"}
+    for side in (pair["a"], pair["b"]):
+        assert side["kind"] == "entities"
+        assert side["slug"]
+        assert isinstance(side["session_count"], int)
+        assert side["href"].startswith("topics/")
+        assert side["href"].endswith(".html")
+    assert pair["description"] == "CLI tool."
+    assert pair["suspicion"] == "folded onto other curated page"
+    assert set(pair["paths"]) == {
+        "wiki/entities/wgctl.md",
+        "wiki/entities/Widget CLI.md",
+    }
+
+
+def test_render_candidates_body_includes_possible_duplicate_pages_section(
+    tmp_path: Path,
+) -> None:
+    """Candidates body lists Possible duplicate pages with titles, links, and decisions.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _mk_wiki(tmp_path)
+    _seed_duplicate_curated_pair(wiki)
+
+    html_out = render_candidates_body(wiki)
+
+    assert "Possible duplicate pages (1)" in html_out
+    assert 'id="cand-table-duplicates"' in html_out
+    assert 'aria-label="Possible duplicate pages"' in html_out
+    assert "wgctl" in html_out
+    assert "Widget CLI" in html_out
+    assert "CLI tool." in html_out
+    assert 'class="cand-dup-intent"' in html_out
+    assert 'class="cand-dup-decision"' in html_out
+    assert 'value="merge-a-into-b"' in html_out
+    assert 'value="merge-b-into-a"' in html_out
+    assert 'value="keep-distinct"' in html_out
+    assert "1 possible duplicate pair" in html_out
+    # Linked topic pages for both sides (must fail if the section is dropped).
+    assert 'href="topics/wgctl.html"' in html_out
+    assert 'href="topics/widget-cli.html"' in html_out
+
+
+def test_render_candidates_body_always_ships_duplicate_section_when_empty(
+    tmp_path: Path,
+) -> None:
+    """Even with no pairs the Possible duplicate pages heading stays on the page.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _mk_wiki(tmp_path)
+    _write_candidate(wiki, "entities", "OnlyStub")
+
+    html_out = render_candidates_body(wiki)
+
+    assert "Possible duplicate pages (0)" in html_out
+    assert 'id="cand-table-duplicates"' in html_out
+    assert "No suspected duplicate pages." in html_out
+    assert candidates_payload(wiki)["duplicate_pairs"] == []
+
+
+def test_render_candidates_page_includes_possible_duplicate_pages(
+    tmp_path: Path,
+) -> None:
+    """Built candidates.html contains the Possible duplicate pages section.
+
+    # @spec: 418-duplicate-page-review
+    """
+    wiki = _mk_wiki(tmp_path)
+    _seed_duplicate_curated_pair(wiki)
+    out = tmp_path / "site"
+    out.mkdir()
+
+    path = render_candidates_page(wiki, out)
+    text = path.read_text(encoding="utf-8")
+
+    assert "Possible duplicate pages (1)" in text
+    assert 'id="cand-table-duplicates"' in text
+    assert "wgctl" in text
+    assert "Widget CLI" in text
+
+
+@needs_node
+def test_collect_actions_emits_merge_pages_and_keep_distinct_shapes(
+    tmp_path: Path,
+) -> None:
+    """Duplicate-pair Decision values map to merge-pages / keep-distinct Apply JSON.
+
+    # @spec: 418-duplicate-page-review
+    """
+    merge_a = _collect_actions(
+        [],
+        tmp_path,
+        dup_specs=[
+            {
+                "a": "wgctl",
+                "b": "Widget CLI",
+                "decision": "merge-a-into-b",
+            },
+        ],
+    )
+    assert merge_a["ok"], merge_a.get("error")
+    assert merge_a["actions"] == [
+        {"action": "merge-pages", "from": "wgctl", "into": "Widget CLI"},
+    ]
+
+    merge_b = _collect_actions(
+        [],
+        tmp_path,
+        dup_specs=[
+            {
+                "a": "wgctl",
+                "b": "Widget CLI",
+                "decision": "merge-b-into-a",
+            },
+        ],
+    )
+    assert merge_b["ok"], merge_b.get("error")
+    assert merge_b["actions"] == [
+        {"action": "merge-pages", "from": "Widget CLI", "into": "wgctl"},
+    ]
+
+    keep = _collect_actions(
+        [],
+        tmp_path,
+        dup_specs=[
+            {
+                "a": "wgctl",
+                "b": "Widget CLI",
+                "decision": "keep-distinct",
+            },
+        ],
+    )
+    assert keep["ok"], keep.get("error")
+    assert keep["actions"] == [
+        {"action": "keep-distinct", "a": "wgctl", "b": "Widget CLI"},
+    ]
+
+
+@needs_node
+def test_collect_actions_batches_stub_and_duplicate_page_rows(
+    tmp_path: Path,
+) -> None:
+    """One Apply batch can mix a stub promote with a duplicate-page keep-distinct.
+
+    # @spec: 418-duplicate-page-review
+    """
+    out = _collect_actions(
+        [{"slug": "NewTool", "kind": "entities", "decision": "promote"}],
+        tmp_path,
+        dup_specs=[
+            {
+                "a": "Alpha",
+                "b": "Beta",
+                "decision": "keep-distinct",
+            },
+        ],
+    )
+    assert out["ok"], out.get("error")
+    assert out["actions"] == [
+        {"action": "promote", "slug": "NewTool", "kind": "entities"},
+        {"action": "keep-distinct", "a": "Alpha", "b": "Beta"},
+    ]
+
+
+@needs_node
+def test_collect_actions_refuses_merge_pages_plus_keep_distinct_same_pair(
+    tmp_path: Path,
+) -> None:
+    """The page refuses merge-pages and keep-distinct on the same unordered pair.
+
+    # @spec: 418-duplicate-page-review
+    """
+    out = _collect_actions(
+        [],
+        tmp_path,
+        dup_specs=[
+            {
+                "a": "Alpha",
+                "b": "Beta",
+                "decision": "merge-a-into-b",
+            },
+            {
+                "a": "Beta",
+                "b": "Alpha",
+                "decision": "keep-distinct",
+            },
+        ],
+    )
+    assert not out["ok"], out
+    assert "batch conflict: merge-pages" in out["error"]
+    assert "keep-distinct" in out["error"]
+
 
 def test_render_candidates_body_prints_the_command_it_hands_off_to(tmp_path: Path) -> None:
     """The body ships an empty command element and the `candidates apply` prefix that Apply later fills in."""
