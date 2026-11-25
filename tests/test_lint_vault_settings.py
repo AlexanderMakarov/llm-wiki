@@ -10,6 +10,7 @@ once a vault can decline the checks that cannot apply to it.
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -39,9 +40,11 @@ def _page(wiki: Path, rel: str, body: str) -> None:
     """Write one entity page with complete frontmatter."""
     path = wiki / rel
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Stay well inside content_freshness's 90-day window (fixed calendar dates age out).
+    last_updated = (date.today() - timedelta(days=7)).isoformat()
     path.write_text(
         f'---\ntitle: "{path.stem}"\ntype: entity\ntags: []\nsources: []\n'
-        f"last_updated: 2026-08-26\n---\n\n# {path.stem}\n\n{body}\n",
+        f"last_updated: {last_updated}\n---\n\n# {path.stem}\n\n{body}\n",
         encoding="utf-8",
     )
 

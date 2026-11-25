@@ -55,3 +55,8 @@
 - PR link keyword: `Closes #371` — issue owns the lossy `1.10` frontmatter round-trip; write-side quoting delivers it (comma-in-tag unsupported by design).
 - Stage: code + tests + CHANGELOG + `context/spec/371-numeric-tag-roundtrip/flow-log.md`. Exclude `review.md`, vault, `config.json`.
 - Next: remote gates (no further tracked flow-log appends after PR open).
+
+## post-merge CI fix-forward (2026-11-25)
+- Post-merge on #428 failed: `content_freshness` warned on fixture pages with fixed `last_updated: 2026-08-26` (now >90 days). Unrelated to tag quoting; calendar drift.
+- Fix: `tests/test_lint_vault_settings.py` and `tests/test_all_min_refs.py` use `date.today() - 7 days` for fixture `last_updated`.
+- Link check failure updates tracking #221 (not a required branch check).
