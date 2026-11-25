@@ -24,6 +24,7 @@ from textwrap import dedent
 import pytest
 
 from llmwiki import tags as t
+from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.lint import REGISTRY, rules  # noqa: F401
 
 # ─── fixture helpers ─────────────────────────────────────────────────────
@@ -166,6 +167,24 @@ def test_add_tag_to_page_appends_to_inline_list(tmp_path):
     assert changed == 1
     text = p.read_text(encoding="utf-8")
     assert "alpha" in text and "beta" in text
+
+
+@pytest.mark.parametrize("tag", ["1.10", "007", "1e3"])
+def test_add_tag_to_page_numeric_looking_tag_reads_back_as_text(tmp_path, tag):
+    """A numeric-looking tag added via ``add_tag_to_page`` is written quoted and parses back as the same string (#371)."""
+    p = tmp_path / "a.md"
+    p.write_text(_source_page("[alpha]"), encoding="utf-8")
+    assert t.add_tag_to_page(tag, p) == 1
+    meta, _ = parse_frontmatter(p.read_text(encoding="utf-8"))
+    assert meta["tags"] == ["alpha", tag]
+
+
+def test_rename_tag_to_numeric_looking_tag_reads_back_as_text(tmp_path):
+    """``rename_tag`` to ``1.10`` writes a quoted tag that parses back as the string ``1.10`` (#371)."""
+    wiki = _mk_wiki(tmp_path, **{"sources/a.md": _source_page("[old, keep]")})
+    t.rename_tag("old", "1.10", wiki_dir=wiki)
+    meta, _ = parse_frontmatter((wiki / "sources" / "a.md").read_text(encoding="utf-8"))
+    assert meta["tags"] == ["1.10", "keep"]
 
 
 def test_add_tag_to_page_idempotent(tmp_path):

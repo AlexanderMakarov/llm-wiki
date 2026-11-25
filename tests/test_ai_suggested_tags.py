@@ -18,6 +18,7 @@ import re
 
 import pytest
 
+from llmwiki._frontmatter import parse_frontmatter
 from llmwiki.synth.pipeline import (
     _AI_TAG_CAP,
     _build_source_page,
@@ -259,20 +260,26 @@ def test_build_source_page_preserves_existing_tags_on_resynthesize(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("tags_field", "expected_prefix"),
+    ("tags_field", "expected_prefix", "expected_head"),
     [
-        ("[wiki-add, raw-doc, bot-api, 10.3, 2026]", "tags: [wiki-add, raw-doc, bot-api, 10.3, 2026"),
-        ("10.3", "tags: [10.3, wiki-add"),
-        ("curated", "tags: [curated, wiki-add"),
+        (
+            "[wiki-add, raw-doc, bot-api, 10.3, 2026]",
+            'tags: [wiki-add, raw-doc, bot-api, "10.3", "2026"',
+            ["wiki-add", "raw-doc", "bot-api", "10.3", "2026"],
+        ),
+        ("10.3", 'tags: ["10.3", wiki-add', ["10.3", "wiki-add"]),
+        ("curated", "tags: [curated, wiki-add", ["curated", "wiki-add"]),
     ],
     ids=["numeric-in-list", "numeric-scalar", "string-scalar"],
 )
 def test_build_source_page_preserves_numeric_existing_tag_on_resynthesize(
-    tmp_path, tags_field, expected_prefix
+    tmp_path, tags_field, expected_prefix, expected_head
 ):
     # #370: frontmatter parses a bare `10.3` tag as a float, and a scalar
     # `tags:` as a non-list; re-synthesize must keep each as one tag instead
     # of crashing on `.strip()` / iteration or splitting a string into letters.
+    # #371: numeric-looking tags are written quoted so they read back as the
+    # same text (asserted both on the written line and on the parsed list).
     existing = tmp_path / "existing.md"
     existing.write_text(
         "---\n"
@@ -301,6 +308,43 @@ def test_build_source_page_preserves_numeric_existing_tag_on_resynthesize(
     )
     tags_line = next(line for line in page.splitlines() if line.startswith("tags: "))
     assert tags_line.startswith(expected_prefix)
+    parsed_tags = parse_frontmatter(page)[0]["tags"]
+    assert parsed_tags[: len(expected_head)] == expected_head
+    assert all(isinstance(tag, str) for tag in parsed_tags)
+
+
+def test_build_source_page_resynthesize_keeps_trailing_zero_tag_text(tmp_path):
+    """A quoted ``"1.10"`` tag survives re-synthesize as the text ``1.10``, never the float ``1.1`` (#371)."""
+    existing = tmp_path / "existing.md"
+    existing.write_text(
+        "---\n"
+        'title: "Release notes"\n'
+        "type: source\n"
+        'tags: [wiki-add, "1.10"]\n'
+        "date: 2026-11-22\n"
+        "source_file: raw/docs/demo/release-notes.md\n"
+        "project: demo\n"
+        "model: \n"
+        "last_updated: 2026-11-22\n"
+        "---\n\n"
+        "## Summary\n\nOld content.\n",
+        encoding="utf-8",
+    )
+    meta = {
+        "slug": "release-notes",
+        "title": "Release notes",
+        "project": "demo",
+        "date": "2026-11-22",
+        "source_file": "raw/docs/demo/release-notes.md",
+        "tags": ["wiki-add", "raw-doc"],
+    }
+    page = _build_source_page(
+        meta, _synth_body("rag"), existing_page_path=existing, is_doc=True
+    )
+    parsed_tags = parse_frontmatter(page)[0]["tags"]
+    assert "1.10" in parsed_tags
+    assert 1.1 not in parsed_tags
+    assert "1.1" not in parsed_tags
 
 
 def test_build_source_page_missing_existing_path_is_safe(tmp_path):

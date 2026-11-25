@@ -56,7 +56,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from llmwiki._frontmatter import parse_frontmatter
+from llmwiki._frontmatter import format_inline_list, parse_frontmatter
 from llmwiki._system_pages import is_archived_path
 from llmwiki.add_doc import _frontmatter as _raw_doc_frontmatter
 from llmwiki.add_doc import compute_content_hash
@@ -579,7 +579,7 @@ def _canonical_page_text(group: _Group, today: str) -> str:
         "---",
         f"title: {json.dumps(group.title, ensure_ascii=False)}",
         "type: source",
-        f"tags: [{', '.join(tags)}]",
+        f"tags: {format_inline_list(tags)}",
         f"date: {group.date}",
         f"source_file: raw/docs/{group.whole_rel}",
         f"project: {group.project}",
