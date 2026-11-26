@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -200,9 +201,11 @@ def test_all_and_synth_harvest_the_same_candidates(
 def _entity(wiki: Path, name: str, body: str) -> None:
     path = wiki / "entities" / f"{name}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Stay well inside content_freshness's 90-day window (fixed calendar dates age out).
+    last_updated = (date.today() - timedelta(days=7)).isoformat()
     path.write_text(
         f'---\ntitle: "{name}"\ntype: entity\ntags: []\nsources: []\n'
-        f"last_updated: 2026-08-26\n---\n\n# {name}\n\n{body}\n",
+        f"last_updated: {last_updated}\n---\n\n# {name}\n\n{body}\n",
         encoding="utf-8",
     )
 
